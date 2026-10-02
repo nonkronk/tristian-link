@@ -1,4 +1,5 @@
 import {
+  ADMIN_EMAIL,
   constantTimeEqual,
   hmacHex,
   json,
@@ -138,3 +139,8 @@ export async function verifyLinkPassword(env, candidate, storedHash) {
   return constantTimeEqual(hash, storedHash);
 }
 
+export function requireAdmin(request, env) {
+  if (env.ENVIRONMENT !== "production") return false;
+  const email = request.headers.get("cf-access-authenticated-user-email") || "";
+  return email.toLowerCase() === ADMIN_EMAIL;
+}

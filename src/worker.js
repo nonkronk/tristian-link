@@ -1,10 +1,10 @@
 import { ADMIN_EMAIL, RESERVED, json, parseBody, text } from "./util.js";
-import { isAdmin, login, logout } from "./auth.js";
 import {
   createLink,
   findLink,
   isExpired,
   recordVisit,
+  requireAdmin,
   verifyLinkPassword,
 } from "./links.js";
 
@@ -62,13 +62,8 @@ function protectedPage(slug) {
   });
 }
 
-function sameOrigin(request) {
-  const origin = request.headers.get("origin");
-  return !origin || origin === new URL(request.url).origin;
-}
-
 async function adminApi(request, env, pathname) {
-  if (!(await isAdmin(request, env))) return json({ error: "Authentication required." }, 401);
+  if (!requireAdmin(request, env)) return text("Not found", 404);
 
   if (pathname === "/admin/api/links" && request.method === "GET") {
     const { results } = await env.DB.prepare(
@@ -86,7 +81,6 @@ async function adminApi(request, env, pathname) {
 
   const match = pathname.match(/^\/admin\/api\/links\/([A-Za-z0-9_-]{3,64})$/);
   if (match && request.method === "DELETE") {
-    if (!sameOrigin(request)) return json({ error: "Cross-origin admin action is not allowed." }, 403);
     const result = await env.DB.prepare("DELETE FROM links WHERE address = ?").bind(match[1]).run();
     return result.meta.changes ? json({ ok: true }) : json({ error: "Link not found." }, 404);
   }
@@ -101,19 +95,6 @@ async function api(request, env, pathname) {
   }
   if (pathname === "/api/links" && request.method === "POST") {
     return createLink(request, env, null);
-  }
-  if (pathname === "/api/auth/login" && request.method === "POST") {
-    if (!sameOrigin(request)) return json({ error: "Cross-origin login is not allowed." }, 403);
-    return login(request, env);
-  }
-  if (pathname === "/api/auth/logout" && request.method === "POST") {
-    if (!sameOrigin(request)) return json({ error: "Cross-origin logout is not allowed." }, 403);
-    return logout();
-  }
-  if (pathname === "/api/auth/session" && request.method === "GET") {
-    return (await isAdmin(request, env))
-      ? json({ authenticated: true, email: ADMIN_EMAIL })
-      : json({ authenticated: false }, 401);
   }
   return json({ error: "Not found." }, 404);
 }
@@ -151,35 +132,11 @@ export default {
 
     if (pathname.startsWith("/admin/api/")) return adminApi(request, env, pathname);
     if (pathname.startsWith("/api/")) return api(request, env, pathname);
-
     if (pathname === "/admin") return Response.redirect(new URL("/admin/", url), 308);
 
-    if (pathname === "/admin/" || pathname === "/admin/index.html") {
-      if (env.ENVIRONMENT !== "production") return notFound(request);
-      if (!(await isAdmin(request, env))) {
-        return Response.redirect(new URL("/admin/login/", url), 302);
-      }
+    if (pathname === "/" || pathname.startsWith("/admin/")) {
       return env.ASSETS.fetch(request);
     }
-
-    if (pathname === "/admin/login" || pathname === "/admin/login/") {
-      if (env.ENVIRONMENT !== "production") return notFound(request);
-      if (await isAdmin(request, env)) {
-        return Response.redirect(new URL("/admin/", url), 302);
-      }
-      const assetRequest = new Request(new URL("/admin/login/", url), request);
-      return env.ASSETS.fetch(assetRequest);
-    }
-
-    if (pathname.startsWith("/admin/")) {
-      if (env.ENVIRONMENT !== "production") return notFound(request);
-      if (!(await isAdmin(request, env)) && !pathname.startsWith("/admin/login/")) {
-        return notFound(request);
-      }
-      return env.ASSETS.fetch(request);
-    }
-
-    if (pathname === "/") return env.ASSETS.fetch(request);
 
     const raw = pathname.slice(1);
     if (!raw || raw.includes("/") || RESERVED.has(raw.toLowerCase())) {
