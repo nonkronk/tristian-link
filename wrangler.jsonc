@@ -15,7 +15,7 @@
     {
       "binding": "DB",
       "database_name": "tristian-link",
-      "database_id": "__D1_DATABASE_ID__",
+      "database_id": "61153ad9-0896-4271-acb4-e4bb8679cc09",
       "migrations_dir": "migrations"
     }
   ],
