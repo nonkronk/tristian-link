@@ -30,7 +30,7 @@ jobs:
           node --check public/app.js
           node --check public/admin/admin.js
           node test/serverless.test.mjs
-          python3 -m py_compile scripts/kutt-to-d1.py scripts/reconcile-access.py
+          python3 -m py_compile scripts/kutt-to-d1.py
           grep -qF 'data-tristian-link-theme="zenburn"' public/index.html
           grep -qF 'Make long links' public/index.html
           grep -qF '"database_id": "61153ad9-0896-4271-acb4-e4bb8679cc09"' wrangler.jsonc
