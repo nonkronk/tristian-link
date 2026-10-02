@@ -89,7 +89,7 @@ pull request
                  tristian-link
 ```
 
-Cloudflare routing remains owned by the separate infrastructure repository so application deployment and traffic cutover are independent operations.
+Cloudflare routing and the path-scoped Access policy remain owned by the separate infrastructure repository so application deployment, administrator authorization, and traffic cutover are independent operations.
 
 ## Migration safety
 
@@ -110,7 +110,7 @@ At the migration point the live Kutt state contained 8 links, 27 aggregate visit
 ```bash
 node --check src/worker.js
 node test/serverless.test.mjs
-python3 -m py_compile scripts/kutt-to-d1.py scripts/reconcile-access.py
+python3 -m py_compile scripts/kutt-to-d1.py
 ```
 
 The live preview workflow additionally proves create → redirect, protected-link challenge, missing-link 404 behavior and D1 migrations against an isolated preview database.
