@@ -8,12 +8,18 @@ import {
   verifyLinkPassword,
 } from "./links.js";
 
-async function notFound(env, request) {
-  const url = new URL("/404.html", request.url);
-  const asset = await env.ASSETS.fetch(new Request(url, request));
-  return new Response(request.method === "HEAD" ? null : asset.body, {
+function notFound(request) {
+  const body = `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#000010"><title>link not found | link.tristian.id</title><link rel="stylesheet" href="/styles.css"></head><body><div class="main-wrapper"><header class="tl-header" data-tristian-link-theme="zenburn"><a class="tl-brand" href="/"><span class="tl-prompt">❯</span><span>link</span><span class="tl-cursor"></span></a></header><main class="tl-notfound"><div class="tl-command"><span class="tl-prompt">❯</span> link not found</div><h1>404</h1><p>Either it never existed, expired, or someone cleaned up after themselves.</p><p><a class="button primary" href="/">go home</a></p></main></div></body></html>`;
+  return new Response(request.method === "HEAD" ? null : body, {
     status: 404,
-    headers: asset.headers,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store",
+      "content-security-policy": "default-src 'none'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
+      "referrer-policy": "no-referrer",
+    },
   });
 }
 
@@ -95,7 +101,7 @@ async function api(request, env, pathname) {
 
 async function resolveShortLink(request, env, ctx, slug) {
   const row = await findLink(env, slug);
-  if (!row || row.banned || isExpired(row)) return notFound(env, request);
+  if (!row || row.banned || isExpired(row)) return notFound(request);
 
   if (row.password_hash) {
     if (request.method === "GET" || request.method === "HEAD") return protectedPage(slug);
@@ -141,7 +147,7 @@ export default {
     try {
       slug = decodeURIComponent(raw);
     } catch {
-      return notFound(env, request);
+      return notFound(request);
     }
     if (!/^[A-Za-z0-9_-]{3,64}$/.test(slug)) return env.ASSETS.fetch(request);
     return resolveShortLink(request, env, ctx, slug);
