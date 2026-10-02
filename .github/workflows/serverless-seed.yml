@@ -169,7 +169,7 @@ jobs:
             -H "Content-Type: application/json" \
             --data '{"sql":"SELECT (SELECT count(*) FROM links) AS links_total, (SELECT count(*) FROM legacy_visits) AS visits_total, (SELECT COALESCE(sum(total),0) FROM legacy_visits) AS historical_clicks"}' \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$D1_ID/query" > "$body"
-          got=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; r=x["result"][0]["results"][0]; print(f"{r["links_total"]}|{r["visits_total"]}|{r["historical_clicks"]}")' "$body")
+          got=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; r=x["result"][0]["results"][0]; print("{}|{}|{}".format(r["links_total"],r["visits_total"],r["historical_clicks"]))' "$body")
           expected="$EXPECT_LINKS|$EXPECT_VISITS|$EXPECT_TOTAL"
           echo "D1 parity counts links|visits|historical_clicks: $got"
           [[ "$got" == "$expected" ]] || {
