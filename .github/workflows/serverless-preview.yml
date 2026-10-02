@@ -142,12 +142,24 @@ jobs:
           echo "protected create HTTP $code"
           [[ "$code" == 201 ]] || { cat "$tmp/protected.json"; exit 1; }
           echo "check: protected challenge"
-          curl -fsS "$URL/$protected" | grep -qF 'This link needs a password.'
-          curl -sS -D "$tmp/protected-headers" -o /dev/null \
+          challenge_code=$(curl -sS -o "$tmp/challenge" -w '%{http_code}' "$URL/$protected")
+          echo "protected challenge HTTP $challenge_code"
+          [[ "$challenge_code" == 200 ]]
+          grep -qF 'This link needs a password.' "$tmp/challenge"
+
+          submit_code=$(curl -sS -D "$tmp/protected-headers" -o "$tmp/protected-body" -w '%{http_code}' \
             -H 'Content-Type: application/x-www-form-urlencoded' \
-            --data 'password=preview-check' "$URL/$protected"
-          grep -qE '^HTTP/[^ ]+ 302' "$tmp/protected-headers"
-          grep -qi '^location: https://example.com/protected' "$tmp/protected-headers"
+            --data 'password=preview-check' "$URL/$protected")
+          echo "protected submit HTTP $submit_code"
+          [[ "$submit_code" == 302 ]] || {
+            echo "protected submit failed without printing response content" >&2
+            exit 1
+          }
+          location=$(awk 'BEGIN{IGNORECASE=1} /^location:/ {sub(/^[^:]+:[[:space:]]*/, ""); sub(/\r$/, ""); print; exit}' "$tmp/protected-headers")
+          [[ "$location" == "https://example.com/protected" ]] || {
+            echo "protected redirect Location mismatch" >&2
+            exit 1
+          }
 
           echo "check: missing link"
           code=$(curl -sS -o "$tmp/notfound" -w '%{http_code}' "$URL/ci-this-does-not-exist")
