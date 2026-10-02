@@ -37,7 +37,7 @@ if links and set(links[0]) != required_links:
 if visits and set(visits[0]) != required_visits:
     raise SystemExit("unexpected Kutt visits export schema")
 
-sql = ["PRAGMA foreign_keys = ON;", "BEGIN;"]
+sql = ["PRAGMA foreign_keys = ON;"]
 for row in links:
     values = [
         row["id"], q(row["address"]), q(row["target"]), q(row["description"]),
@@ -85,6 +85,6 @@ for row in visits:
         "owner_email=excluded.owner_email;"
     )
 
-sql += ["COMMIT;", ""]
+sql += [""]
 out_path.write_text("\n".join(sql), encoding="utf-8")
 print(f"migration SQL generated: links={len(links)} legacy_visits={len(visits)}")
