@@ -1,6 +1,15 @@
 const container = document.getElementById("admin-links");
 const errorBox = document.getElementById("admin-error");
 const refresh = document.getElementById("refresh");
+const logout = document.getElementById("logout");
+
+function requireLogin(response) {
+  if (response.status === 401) {
+    window.location.replace("/admin/login/");
+    return true;
+  }
+  return false;
+}
 
 function fmt(value) {
   if (!value) return "—";
@@ -16,6 +25,7 @@ function showError(message) {
 async function remove(address, row) {
   if (!window.confirm(`Delete /${address}?`)) return;
   const response = await fetch(`/admin/api/links/${encodeURIComponent(address)}`, { method: "DELETE" });
+  if (requireLogin(response)) return;
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
     throw new Error(data.error || "Delete failed.");
@@ -77,6 +87,7 @@ async function load() {
   refresh.disabled = true;
   try {
     const response = await fetch("/admin/api/links", { headers: { accept: "application/json" } });
+    if (requireLogin(response)) return;
     if (!response.ok) throw new Error(response.status === 404 ? "Admin API is unavailable in this environment." : "Could not load links.");
     const data = await response.json();
     render(data.links || []);
@@ -88,4 +99,12 @@ async function load() {
 }
 
 refresh.addEventListener("click", load);
+logout?.addEventListener("click", async () => {
+  logout.disabled = true;
+  try {
+    await fetch("/api/auth/logout", { method: "POST" });
+  } finally {
+    window.location.replace("/admin/login/");
+  }
+});
 load();
