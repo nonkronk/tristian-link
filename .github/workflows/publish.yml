@@ -51,10 +51,30 @@ jobs:
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
           provenance: mode=max
           sbom: true
+      - name: Build and publish native ARM64 production artifact
+        id: arm64
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/tristian-link-theme:production-arm64
+            ghcr.io/${{ github.repository_owner }}/tristian-link-theme:production-arm64-sha-${{ github.sha }}
+          labels: |
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.source=https://github.com/${{ github.repository }}
+            io.tristian.link.role=production-arm64
+          provenance: false
+          sbom: false
       - name: Publish summary
         run: |
           {
             echo '### Tristian Link theme published'
             echo
+            echo 'Portable multi-arch artifact:'
             echo '`ghcr.io/${{ github.repository_owner }}/tristian-link-theme:main@${{ steps.build.outputs.digest }}`'
+            echo
+            echo 'OCI production ARM64 artifact:'
+            echo '`ghcr.io/${{ github.repository_owner }}/tristian-link-theme:production-arm64@${{ steps.arm64.outputs.digest }}`'
           } >> "$GITHUB_STEP_SUMMARY"

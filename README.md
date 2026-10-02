@@ -32,6 +32,7 @@ thedevs-network/kutt
                          │
                          ▼
      ghcr.io/nonkronk/tristian-link-theme:main
+     + production-arm64 (native manifest)
                          │ Renovate digest
                          ▼
                     nonkronk/oci
@@ -58,7 +59,7 @@ Dockerfile                      scratch OCI artifact; no application fork
 
 Renovate proposes Kutt updates here first. Patch and digest updates may auto-merge only after compatibility CI passes. Minor updates remain human-reviewed; majors also require Dependency Dashboard approval.
 
-A successful merge republishes `tristian-link-theme:main`. Production pins that artifact by digest alongside the exact Kutt image, so `link.tristian.id` only advances after the product layer and upstream image are proven compatible.
+A successful merge publishes both a portable multi-arch `tristian-link-theme:main` artifact and a native `production-arm64` artifact. OCI production pins the native ARM64 manifest by digest alongside the exact Kutt image, avoiding manifest-index/attestation compatibility problems on the deployment host while the public project still offers a normal multi-arch artifact.
 
 If an overridden upstream template changes, CI stops with the affected path and expected/actual Git blob hashes. The override must be reviewed intentionally rather than silently drifting.
 
