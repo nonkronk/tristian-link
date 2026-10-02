@@ -130,17 +130,16 @@ jobs:
           [[ "$db_id" =~ ^[0-9a-f-]{36}$ ]]
           echo "id=$db_id" >> "$GITHUB_OUTPUT"
 
-      - name: Render production config and apply schema
+      - name: Verify pinned production D1 and apply schema
         id: config
         shell: bash
         env:
           D1_ID: ${{ steps.d1.outputs.id }}
         run: |
           set -euo pipefail
-          cfg="$PWD/.wrangler.production.rendered.jsonc"
-          python3 -c 'import pathlib,sys; db_id,out=sys.argv[1:]; text=pathlib.Path("wrangler.jsonc").read_text(encoding="utf-8"); assert text.count("__D1_DATABASE_ID__")==1; pathlib.Path(out).write_text(text.replace("__D1_DATABASE_ID__",db_id),encoding="utf-8")' "$D1_ID" "$cfg"
-          echo "path=$cfg" >> "$GITHUB_OUTPUT"
-          npx --yes wrangler@4.145.0 d1 migrations apply DB --remote --config "$cfg"
+          grep -qF "\"database_id\": \"$D1_ID\"" wrangler.jsonc
+          echo "path=$PWD/wrangler.jsonc" >> "$GITHUB_OUTPUT"
+          npx --yes wrangler@4.145.0 d1 migrations apply DB --remote --config wrangler.jsonc
 
       - name: Transform and import Kutt snapshot
         shell: bash
@@ -188,4 +187,3 @@ jobs:
           if [[ -n "${TMPDIR_PRIVATE:-}" && "$TMPDIR_PRIVATE" == /tmp/* ]]; then
             rm -rf -- "$TMPDIR_PRIVATE"
           fi
-          rm -f .wrangler.production.rendered.jsonc
