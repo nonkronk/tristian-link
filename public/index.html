@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
+  <link rel="icon" href="/favicon.ico" sizes="48x48">
+  <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="theme-color" content="#000010">
+  <meta name="description" content="Make long links less annoying. A tiny serverless URL shortener by tristian.id.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://link.tristian.id/">
+  <meta property="og:title" content="link.tristian.id">
+  <meta property="og:description" content="Make long links less annoying.">
+  <title>link.tristian.id</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/app.js"></script>
+</head>
+<body>
+  <div class="main-wrapper">
+    <header class="tl-header" data-tristian-link-theme="zenburn">
+      <div class="tl-brand-wrap">
+        <a class="tl-brand" href="/" aria-label="link.tristian.id home">
+          <span class="tl-prompt" aria-hidden="true">❯</span>
+          <span>link</span>
+          <span class="tl-cursor" aria-hidden="true"></span>
+        </a>
+        <div class="tl-powerline" aria-label="Current section">
+          <span class="tl-segment tl-segment-host">guest</span>
+          <span class="tl-segment tl-segment-path">~/shorten</span>
+        </div>
+      </div>
+      <nav class="tl-nav" aria-label="Primary navigation">
+        <ul>
+          <li><a href="https://tristian.id">tristian.id</a></li>
+          <li><a href="/report/">report</a></li>
+          <li><a class="button primary tl-login" href="/admin/">admin</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <div class="tl-home-shell">
+      <main class="tl-shortener">
+        <section class="tl-hero" aria-labelledby="tl-shortener-title">
+          <div class="tl-command"><span class="tl-prompt">❯</span> shorten</div>
+          <div id="tl-result-status" class="tl-result-status" hidden>✓ done</div>
+          <div id="shorturl">
+            <div>
+              <h1 id="tl-shortener-title">Make long links <span>less annoying.</span></h1>
+              <p id="tl-subtitle" class="tl-subtitle">Paste a URL. Get a short one. That's it.</p>
+            </div>
+          </div>
+        </section>
+
+        <form id="shortener-form" autocomplete="off">
+          <div class="target-wrapper">
+            <label class="tl-sr-only" for="target">Long URL</label>
+            <input id="target" name="target" type="url" inputmode="url" placeholder="https://example.com/a/needlessly/long/link" aria-label="Long URL" autofocus required>
+            <button class="submit tl-submit" type="submit" aria-label="Shorten link">
+              <span class="tl-submit-label">Shorten <span aria-hidden="true">↵</span></span>
+            </button>
+            <p id="tl-form-error" class="error" hidden></p>
+          </div>
+
+          <label class="checkbox tl-options-toggle">
+            <input id="show-advanced" type="checkbox">
+            <span><span aria-hidden="true">+</span> options</span>
+          </label>
+
+          <section id="advanced-options" class="tl-options hidden">
+            <div class="advanced-input-wrapper">
+              <label>
+                Alias
+                <span class="tl-domain-prefix">link.tristian.id/</span>
+                <input type="text" id="customurl" name="customurl" placeholder="my-link" autocomplete="off">
+              </label>
+              <label>
+                Password
+                <input type="password" id="password" name="password" placeholder="optional" autocomplete="new-password">
+              </label>
+            </div>
+            <div class="advanced-input-wrapper">
+              <label class="expire-in">
+                Expire in
+                <input type="text" id="expire_in" name="expire_in" placeholder="2 hours / 30 days / 1 year">
+              </label>
+              <label class="description">
+                Description
+                <input type="text" id="description" name="description" placeholder="what is this link for?" maxlength="500">
+              </label>
+            </div>
+          </section>
+
+          <p class="tl-shortcuts" aria-label="Keyboard shortcuts"><kbd>/</kbd> focus URL <span>·</span> <kbd>⌘/Ctrl K</kbd> commands</p>
+        </form>
+      </main>
+
+      <section class="tl-manifest" aria-label="What link.tristian.id can do">
+        <div class="tl-manifest-title"><span class="tl-prompt">❯</span> ls ~/features</div>
+        <dl>
+          <div><dt>edge redirects</dt><dd>short links resolve at Cloudflare's edge</dd></div>
+          <div><dt>analytics</dt><dd>bounded click stats without storing visitor IPs</dd></div>
+          <div><dt>expiry + passwords</dt><dd>links can disappear or stay private</dd></div>
+          <div><dt>api</dt><dd>automate it when clicking gets boring</dd></div>
+        </dl>
+        <p class="tl-manifest-note">Fast enough to forget about. Small enough to understand.</p>
+      </section>
+    </div>
+
+    <footer class="tl-footer">
+      <div class="tl-footer-line">
+        <span><span class="tl-prompt">❯</span> link.tristian.id</span>
+        <span class="tl-footer-copy">a small URL shortener by <a href="https://tristian.id">tristian.id</a></span>
+      </div>
+      <nav aria-label="Footer">
+        <a href="/terms/">terms</a>
+        <a href="/report/">report abuse</a>
+        <a href="https://github.com/nonkronk/tristian-link" target="_blank" rel="noopener noreferrer">source</a>
+      </nav>
+    </footer>
+  </div>
+
+  <button id="tl-command-trigger" class="tl-command-trigger" type="button" aria-label="Open command palette" title="Commands (⌘/Ctrl K)">⌘K</button>
+  <div id="tl-command-palette" class="tl-command-palette" hidden>
+    <div class="tl-command-dialog" role="dialog" aria-modal="true" aria-labelledby="tl-command-title">
+      <div class="tl-command-head">
+        <span id="tl-command-title"><span class="tl-prompt">❯</span> commands</span>
+        <kbd>esc</kbd>
+      </div>
+      <button type="button" data-tl-action="focus"><span>shorten a link</span><kbd>/</kbd></button>
+      <a href="/admin/"><span>admin</span><kbd>g a</kbd></a>
+      <a href="https://tristian.id"><span>visit tristian.id</span><kbd>g h</kbd></a>
+    </div>
+  </div>
+</body>
+</html>
