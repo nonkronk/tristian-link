@@ -4,7 +4,7 @@
 
 [link.tristian.id](https://link.tristian.id) is a small Cloudflare-native URL shortener with a Termux Zenburn-inspired interface.
 
-The application is intentionally boring operationally: one Worker, static assets at the edge, D1 for links and analytics, and native Workers rate limiting for anonymous creation. The public service is fully serverless; `/admin/*` is protected by an infrastructure-owned Cloudflare Access application and the Worker independently verifies the signed Access JWT before serving privileged API operations.
+The application is intentionally boring operationally: one Worker, static assets at the edge, D1 for links and analytics, and native Workers rate limiting for anonymous creation. The public service is fully serverless; the owner-only management surface is protected by an infrastructure-owned Cloudflare Access application and the Worker independently verifies the signed Access JWT before serving privileged API operations.
 
 ## Architecture
 
@@ -26,12 +26,12 @@ Cloudflare edge
    │     ├── bounded click metadata
    │     └── 302 target
    │
-   └── /admin/*
+   └── owner management surface
          └── Cloudflare Access
                └── RS256 JWT verification in Worker
                      ├── issuer + audience + time claims
                      └── owner email
-                           └── admin D1 operations
+                           └── privileged D1 operations
 ```
 
 Production does not require a VM, Node server, Redis, Postgres, nginx, or a permanent application fork.
@@ -46,7 +46,7 @@ The serverless rewrite keeps the behavior that matters from the previous Kutt de
 - optional link passwords;
 - redirect click counts;
 - bounded country/referrer/browser/OS analytics without retaining visitor IP addresses;
-- an owner-only admin list/delete API behind Cloudflare Access, with a second fail-closed JWT verification layer in the Worker;
+- an owner-only management list/delete API behind Cloudflare Access, with a second fail-closed JWT verification layer in the Worker;
 - the existing `❯ link` visual language, mobile fixes and exact `tristian.id` favicon family;
 - branded 404, terms and abuse-report pages.
 
@@ -68,7 +68,7 @@ Only bounded metadata is written for new clicks: country code supplied by Cloudf
 - Embedded URL credentials are rejected.
 - Public creation is same-origin and rate limited.
 - Link passwords are HMAC-SHA-256 hashes using a Worker secret that is never stored in Git.
-- Admin endpoints require the production enable flag **and** a valid `Cf-Access-Jwt-Assertion`. The Worker verifies Cloudflare's RS256 signature against the rotating team JWKS, then checks issuer, application audience, validity times, token type and owner email. The legacy identity header alone is never accepted.
+- Privileged management endpoints require the production enable flag **and** a valid `Cf-Access-Jwt-Assertion`. The Worker verifies Cloudflare's RS256 signature against the rotating team JWKS, then checks issuer, application audience, validity times, token type and owner email. The legacy identity header alone is never accepted.
 - The Access team domain and application audience in `wrangler.jsonc` are public identifiers, not credentials; authorization still requires a Cloudflare-signed token.
 - Static pages ship a strict CSP, no-referrer policy, frame denial and locked-down Permissions Policy.
 - Production `workers.dev` and preview URLs are disabled.
@@ -93,7 +93,7 @@ pull request
                  tristian-link
 ```
 
-Cloudflare routing and administrator authentication remain owned by the separate infrastructure repository so application deployment, privileged access, and traffic cutover are independent operations.
+Cloudflare routing and owner authentication remain owned by the separate infrastructure repository so application deployment, privileged access, and traffic cutover are independent operations.
 
 ## Migration safety
 

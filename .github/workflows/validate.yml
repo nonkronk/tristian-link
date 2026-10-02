@@ -34,6 +34,8 @@ jobs:
           python3 -m py_compile scripts/kutt-to-d1.py
           grep -qF 'data-tristian-link-theme="zenburn"' public/index.html
           grep -qF 'Make long links' public/index.html
+          ! grep -qiE 'href="/admin/|>admin<' public/index.html
+          ! grep -qF '/admin/' public/robots.txt
           grep -qF '"database_id": "61153ad9-0896-4271-acb4-e4bb8679cc09"' wrangler.jsonc
           grep -qF '"__D1_DATABASE_ID__"' wrangler.preview.jsonc
       - name: Validate legacy Kutt fallback layer
