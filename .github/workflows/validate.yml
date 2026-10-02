@@ -18,7 +18,24 @@ jobs:
     timeout-minutes: 12
     steps:
       - uses: actions/checkout@v7
-      - name: Validate product layer
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+      - name: Validate serverless application
+        run: |
+          set -euo pipefail
+          node --check src/worker.js
+          node --check src/links.js
+          node --check src/util.js
+          node --check public/app.js
+          node --check public/admin/admin.js
+          node test/serverless.test.mjs
+          python3 -m py_compile scripts/kutt-to-d1.py scripts/reconcile-access.py
+          grep -qF 'data-tristian-link-theme="zenburn"' public/index.html
+          grep -qF 'Make long links' public/index.html
+          grep -qF '"database_id": "61153ad9-0896-4271-acb4-e4bb8679cc09"' wrangler.jsonc
+          grep -qF '"__D1_DATABASE_ID__"' wrangler.preview.jsonc
+      - name: Validate legacy Kutt fallback layer
         run: bash test/theme.sh
       - name: Verify against exact upstream Kutt image
         run: bash test/upstream.sh

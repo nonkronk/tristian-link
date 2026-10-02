@@ -1,0 +1,171 @@
+name: Serverless preview
+
+on:
+  push:
+    branches: [feat/serverless-worker]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'migrations/**'
+      - 'wrangler.preview.jsonc'
+      - '.github/workflows/serverless-preview.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tristian-link-serverless-preview
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: [self-hosted, Linux, ARM64, link]
+    environment: CLOUDFLARE
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 54a91f1020fb773dad8aa0b3a70f93b4
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Resolve or create preview D1 database
+        id: d1
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(mktemp)
+          trap 'rm -f "$body"' EXIT
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database?name=tristian-link-preview" \
+            > "$body"
+          db_id=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; rows=[r for r in x.get("result",[]) if r.get("name")=="tristian-link-preview"]; assert len(rows)<=1; print(rows[0]["uuid"] if rows else "")' "$body")
+          if [[ -z "$db_id" ]]; then
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data '{"name":"tristian-link-preview","primary_location_hint":"apac"}' \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" \
+              > "$body"
+            db_id=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; r=x["result"]; assert r["name"]=="tristian-link-preview"; print(r["uuid"])' "$body")
+          fi
+          [[ "$db_id" =~ ^[0-9a-f-]{36}$ ]]
+          echo "id=$db_id" >> "$GITHUB_OUTPUT"
+          echo "Preview D1 ready"
+
+      - name: Render preview config and apply migrations
+        id: config
+        shell: bash
+        env:
+          D1_ID: ${{ steps.d1.outputs.id }}
+        run: |
+          set -euo pipefail
+          cfg="$PWD/.wrangler.preview.rendered.jsonc"
+          python3 -c 'import pathlib,sys; db_id,out=sys.argv[1:]; text=pathlib.Path("wrangler.preview.jsonc").read_text(encoding="utf-8"); assert text.count("__D1_DATABASE_ID__")==1; pathlib.Path(out).write_text(text.replace("__D1_DATABASE_ID__",db_id),encoding="utf-8")' "$D1_ID" "$cfg"
+          echo "path=$cfg" >> "$GITHUB_OUTPUT"
+          npx --yes wrangler@4.145.0 d1 migrations apply DB --remote --config "$cfg"
+
+      - name: Deploy isolated serverless preview
+        id: deploy
+        shell: bash
+        env:
+          CFG: ${{ steps.config.outputs.path }}
+        run: |
+          set -euo pipefail
+          out=$(mktemp)
+          trap 'rm -f "$out"' EXIT
+          npx --yes wrangler@4.145.0 deploy --config "$CFG" | tee "$out"
+          url=$(grep -oE 'https://[A-Za-z0-9._-]+\.workers\.dev' "$out" | tail -n1)
+          [[ "$url" =~ ^https://[A-Za-z0-9._-]+\.workers\.dev$ ]]
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Seed preview-only link password secret
+        shell: bash
+        env:
+          CFG: ${{ steps.config.outputs.path }}
+        run: |
+          set -euo pipefail
+          secret=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+          printf '%s' "$secret" | npx --yes wrangler@4.145.0 secret put LINK_PASSWORD_PEPPER --config "$CFG" >/dev/null
+          unset secret
+          echo "Preview Worker secret configured"
+
+      - name: Verify public create, redirect, password, and 404 behavior
+        shell: bash
+        env:
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          cleanup() {
+            rm -rf "$tmp"
+          }
+          trap cleanup EXIT
+
+          echo "check: health"
+          for _ in $(seq 1 30); do
+            if curl -fsS "$URL/api/health" | grep -q '"ok":true'; then break; fi
+            sleep 2
+          done
+          curl -fsS "$URL/api/health" | grep -q '"ok":true'
+          echo "check: homepage"
+          curl -fsS "$URL/" > "$tmp/home"
+          grep -qF 'data-tristian-link-theme="zenburn"' "$tmp/home"
+          grep -qF 'Make long links' "$tmp/home"
+
+          echo "check: public create"
+          alias="ci-${GITHUB_RUN_ID}"
+          payload=$(printf '{"target":"https://example.com/serverless-ci","customurl":"%s","description":"CI preview"}' "$alias")
+          code=$(curl -sS -o "$tmp/create.json" -w '%{http_code}' \
+            -H 'Content-Type: application/json' --data "$payload" "$URL/api/links")
+          echo "public create HTTP $code"
+          [[ "$code" == 201 ]] || { cat "$tmp/create.json"; exit 1; }
+          python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x["address"]==sys.argv[2]; assert x["url"].endswith("/"+sys.argv[2])' "$tmp/create.json" "$alias"
+
+          echo "check: public redirect"
+          curl -sS -D "$tmp/headers" -o /dev/null "$URL/$alias"
+          grep -qE '^HTTP/[^ ]+ 302' "$tmp/headers"
+          grep -qi '^location: https://example.com/serverless-ci' "$tmp/headers"
+
+          echo "check: protected create"
+          protected="cip-${GITHUB_RUN_ID}"
+          payload=$(printf '{"target":"https://example.com/protected","customurl":"%s","password":"preview-check"}' "$protected")
+          code=$(curl -sS -o "$tmp/protected.json" -w '%{http_code}' \
+            -H 'Content-Type: application/json' --data "$payload" "$URL/api/links")
+          [[ "$code" == 201 ]]
+          echo "protected create HTTP $code"
+          [[ "$code" == 201 ]] || { cat "$tmp/protected.json"; exit 1; }
+          echo "check: protected challenge"
+          curl -fsS "$URL/$protected" | grep -qF 'This link needs a password.'
+          curl -sS -D "$tmp/protected-headers" -o /dev/null \
+            -H 'Content-Type: application/x-www-form-urlencoded' \
+            --data 'password=preview-check' "$URL/$protected"
+          grep -qE '^HTTP/[^ ]+ 302' "$tmp/protected-headers"
+          grep -qi '^location: https://example.com/protected' "$tmp/protected-headers"
+
+          echo "check: missing link"
+          code=$(curl -sS -o "$tmp/notfound" -w '%{http_code}' "$URL/ci-this-does-not-exist")
+          echo "missing link HTTP $code"
+          [[ "$code" == 404 ]] || { head -c 400 "$tmp/notfound"; echo; exit 1; }
+          grep -qF 'link not found' "$tmp/notfound" || { head -c 400 "$tmp/notfound"; echo; exit 1; }
+
+          echo "check: preview admin"
+          admin_code=$(curl -sS -o /dev/null -w '%{http_code}' "$URL/admin/api/links")
+          [[ "$admin_code" == 404 ]]
+          echo "Serverless preview runtime: PASS"
+
+      - name: Remove CI-created preview rows
+        if: always()
+        shell: bash
+        env:
+          CFG: ${{ steps.config.outputs.path }}
+        run: |
+          set -euo pipefail
+          [[ -n "${CFG:-}" && -f "$CFG" ]] || exit 0
+          npx --yes wrangler@4.145.0 d1 execute DB --remote --config "$CFG" \
+            --command "DELETE FROM clicks WHERE link_id IN (SELECT id FROM links WHERE address LIKE 'ci-%' OR address LIKE 'cip-%'); DELETE FROM links WHERE address LIKE 'ci-%' OR address LIKE 'cip-%';" >/dev/null

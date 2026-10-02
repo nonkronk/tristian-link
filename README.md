@@ -2,82 +2,123 @@
 
 **Make long links less annoying.**
 
-[link.tristian.id](https://link.tristian.id) is a playful, terminal-inspired URL shortener built on top of [Kutt](https://github.com/thedevs-network/kutt) without maintaining a permanent application fork.
+[link.tristian.id](https://link.tristian.id) is a small Cloudflare-native URL shortener with a Termux Zenburn-inspired interface.
 
-The product layer stays deliberately small and replaceable: custom Handlebars views, a Termux Zenburn-inspired responsive theme, shared `tristian.id` favicon assets, and compatibility tests that fail closed when upstream changes something we override.
-
-## Why this exists
-
-- **Kutt stays upstream.** Runtime features, security fixes, migrations, analytics, auth and the API remain Kutt's responsibility.
-- **Branding is a read-only layer.** Production materializes this repository's `custom/` tree and mounts it at `/kutt/custom:ro`.
-- **Upstream compatibility is tested.** Exact hashes of overridden Kutt templates are checked against every proposed Kutt update.
-- **Mobile is first-class.** Narrow layouts, safe areas, 16 px form controls, long URLs and dialogs have explicit regression contracts.
-- **The artifact is disposable.** CI publishes a tiny OCI image containing only `/custom` plus compatibility metadata.
+The application is intentionally boring operationally: one Worker, static assets at the edge, D1 for links and analytics, native Workers rate limiting for anonymous creation, and Cloudflare Access for the private admin surface.
 
 ## Architecture
 
 ```text
-thedevs-network/kutt
-        │ Renovate
-        ▼
- compatibility/compose.yaml
-        │
-        ├── upstream template hash contract
-        └── boot + branding smoke test
-                         │
-                         ▼
-                  nonkronk/tristian-link
-                         │
-                  publish OCI artifact
-                         │
-                         ▼
-     ghcr.io/nonkronk/tristian-link-theme:main
-     + production-arm64 (native manifest)
-                         │ Renovate digest
-                         ▼
-                    nonkronk/oci
-                         │ safe GitOps rollout
-                         ▼
-                  link.tristian.id
+browser
+   │
+   ▼
+Cloudflare edge
+   │
+   ├── static assets
+   │     └── Zenburn UI
+   │
+   ├── POST /api/links
+   │     ├── per-client rate limit
+   │     └── D1 insert
+   │
+   ├── GET /<slug>
+   │     ├── D1 lookup
+   │     ├── bounded click metadata
+   │     └── 302 target
+   │
+   └── /admin/*
+         └── Cloudflare Access
+               └── owner only
 ```
 
-## Repository layout
+Production does not require a VM, Node server, Redis, Postgres, nginx, or a permanent application fork.
+
+## What is preserved
+
+The serverless rewrite keeps the behavior that matters from the previous Kutt deployment:
+
+- anonymous URL shortening;
+- custom aliases;
+- optional expiry;
+- optional link passwords;
+- redirect click counts;
+- bounded country/referrer/browser/OS analytics without retaining visitor IP addresses;
+- a private admin list/delete API;
+- the existing `❯ link` visual language, mobile fixes and exact `tristian.id` favicon family;
+- branded 404, terms and abuse-report pages.
+
+The old Kutt database is migrated directly into D1 by a private CI job. URL targets never become workflow artifacts or Git content.
+
+## Data model
+
+`migrations/0001_initial.sql` owns three tables:
+
+- `links` — canonical redirect state;
+- `legacy_visits` — read-only aggregate Kutt analytics preserved during migration;
+- `clicks` — new edge-era click events.
+
+Only bounded metadata is written for new clicks: country code supplied by Cloudflare, referrer hostname, coarse browser family and coarse OS family. Client IP addresses are used only as an ephemeral rate-limit key and are not persisted.
+
+## Security
+
+- Targets are restricted to `http://` and `https://`.
+- Embedded URL credentials are rejected.
+- Public creation is same-origin and rate limited.
+- Link passwords are HMAC-SHA-256 hashes using a Worker secret that is never stored in Git.
+- Admin endpoints require Cloudflare Access and independently verify the authenticated email header.
+- Static pages ship a strict CSP, no-referrer policy, frame denial and locked-down Permissions Policy.
+- Production `workers.dev` and preview URLs are disabled.
+
+## Deployment
+
+The public repository owns application code and D1 migrations.
 
 ```text
-custom/                         Kutt-supported customization layer
-compatibility/compose.yaml      exact Kutt image tested by CI
-compatibility/upstream-contract.json
-                                hashes of upstream templates we override
-test/theme.sh                   static product contract
-test/upstream.sh                upstream compatibility + runtime smoke test
-Dockerfile                      scratch OCI artifact; no application fork
-.github/workflows/validate.yml  PR compatibility gate
-.github/workflows/publish.yml   multi-arch GHCR publication
+pull request
+    │
+    ├── static/unit validation
+    └── isolated Workers preview
+             │
+             ▼
+           main
+             │
+             ├── D1 migrations
+             └── wrangler deploy
+                     │
+                     ▼
+                 tristian-link
 ```
 
-## Update workflow
+Cloudflare routing remains owned by the separate infrastructure repository so application deployment and traffic cutover are independent operations.
 
-Renovate proposes Kutt updates here first. Patch and digest updates may auto-merge only after compatibility CI passes. Minor updates remain human-reviewed; majors also require Dependency Dashboard approval.
+## Migration safety
 
-A successful merge publishes both a portable multi-arch `tristian-link-theme:main` artifact and a native `production-arm64` artifact. OCI production pins the native ARM64 manifest by digest alongside the exact Kutt image, avoiding manifest-index/attestation compatibility problems on the deployment host while the public project still offers a normal multi-arch artifact.
+The Kutt-to-D1 migration is deliberately fail-closed:
 
-If an overridden upstream template changes, CI stops with the affected path and expected/actual Git blob hashes. The override must be reviewed intentionally rather than silently drifting.
+1. inspect the live Kutt schema;
+2. refuse migration if custom domains, passworded legacy links, or API keys appear without an adapter;
+3. export links and aggregate visits into a mode-0700 temporary workspace on the self-hosted runner;
+4. transform directly to idempotent D1 SQL;
+5. import into production D1;
+6. compare source/D1 link count, visit-row count and historical-click total;
+7. destroy the temporary workspace.
 
-## Local validation
+At the migration point the live Kutt state contained 8 links, 27 aggregate visit rows and 58 historical clicks, with no custom domains, passworded links or API keys.
+
+## Local checks
 
 ```bash
-bash test/theme.sh
-bash test/upstream.sh
+node --check src/worker.js
+node test/serverless.test.mjs
+python3 -m py_compile scripts/kutt-to-d1.py scripts/reconcile-access.py
 ```
 
-`test/upstream.sh` pulls the exact Kutt image from `compatibility/compose.yaml`, mounts `custom/` read-only, boots Kutt, and verifies that the branded runtime actually renders.
+The live preview workflow additionally proves create → redirect, protected-link challenge, missing-link 404 behavior and D1 migrations against an isolated preview database.
 
-## Design language
+## History
 
-The interface borrows from the official Termux Zenburn palette and Powerlevel10k-style prompt vocabulary without turning normal interactions into a fake terminal. A non-technical visitor still gets the familiar flow: paste URL → shorten → copy.
-
-The favicon set is copied byte-for-byte from [nonkronk/tristian-id](https://github.com/nonkronk/tristian-id), keeping the site family visually consistent.
+Tristian Link originally shipped as an upstream-compatible customization layer for [Kutt](https://github.com/thedevs-network/kutt). That design deliberately avoided a permanent fork and made upstream upgrades safe. The serverless rewrite retired the runtime dependency after the production data and behavior could be reproduced directly on Cloudflare.
 
 ## License
 
-MIT. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Kutt is an independent upstream project and is also MIT licensed.
+MIT. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
