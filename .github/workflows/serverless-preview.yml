@@ -107,31 +107,40 @@ jobs:
           }
           trap cleanup EXIT
 
+          echo "check: health"
           for _ in $(seq 1 30); do
             if curl -fsS "$URL/api/health" | grep -q '"ok":true'; then break; fi
             sleep 2
           done
           curl -fsS "$URL/api/health" | grep -q '"ok":true'
+          echo "check: homepage"
           curl -fsS "$URL/" > "$tmp/home"
           grep -qF 'data-tristian-link-theme="zenburn"' "$tmp/home"
           grep -qF 'Make long links' "$tmp/home"
 
+          echo "check: public create"
           alias="ci-${GITHUB_RUN_ID}"
           payload=$(printf '{"target":"https://example.com/serverless-ci","customurl":"%s","description":"CI preview"}' "$alias")
           code=$(curl -sS -o "$tmp/create.json" -w '%{http_code}' \
             -H 'Content-Type: application/json' --data "$payload" "$URL/api/links")
-          [[ "$code" == 201 ]]
+          echo "public create HTTP $code"
+          [[ "$code" == 201 ]] || { cat "$tmp/create.json"; exit 1; }
           python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x["address"]==sys.argv[2]; assert x["url"].endswith("/"+sys.argv[2])' "$tmp/create.json" "$alias"
 
+          echo "check: public redirect"
           curl -sS -D "$tmp/headers" -o /dev/null "$URL/$alias"
           grep -qE '^HTTP/[^ ]+ 302' "$tmp/headers"
           grep -qi '^location: https://example.com/serverless-ci' "$tmp/headers"
 
+          echo "check: protected create"
           protected="cip-${GITHUB_RUN_ID}"
           payload=$(printf '{"target":"https://example.com/protected","customurl":"%s","password":"preview-check"}' "$protected")
           code=$(curl -sS -o "$tmp/protected.json" -w '%{http_code}' \
             -H 'Content-Type: application/json' --data "$payload" "$URL/api/links")
           [[ "$code" == 201 ]]
+          echo "protected create HTTP $code"
+          [[ "$code" == 201 ]] || { cat "$tmp/protected.json"; exit 1; }
+          echo "check: protected challenge"
           curl -fsS "$URL/$protected" | grep -qF 'This link needs a password.'
           curl -sS -D "$tmp/protected-headers" -o /dev/null \
             -H 'Content-Type: application/x-www-form-urlencoded' \
@@ -139,10 +148,12 @@ jobs:
           grep -qE '^HTTP/[^ ]+ 302' "$tmp/protected-headers"
           grep -qi '^location: https://example.com/protected' "$tmp/protected-headers"
 
+          echo "check: missing link"
           code=$(curl -sS -o "$tmp/notfound" -w '%{http_code}' "$URL/ci-this-does-not-exist")
           [[ "$code" == 404 ]]
           grep -qF 'link not found' "$tmp/notfound"
 
+          echo "check: preview admin"
           admin_code=$(curl -sS -o /dev/null -w '%{http_code}' "$URL/admin/api/links")
           [[ "$admin_code" == 404 ]]
           echo "Serverless preview runtime: PASS"
