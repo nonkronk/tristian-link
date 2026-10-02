@@ -1,4 +1,5 @@
 name: Bootstrap hidden production Worker
+# One-time pre-cutover bootstrap; remove before merging to main.
 
 on:
   push:
