@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#000010">
+  <title>admin | link.tristian.id</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="module" src="/admin/admin.js"></script>
+</head>
+<body>
+  <div class="main-wrapper">
+    <header class="tl-header" data-tristian-link-theme="zenburn">
+      <div class="tl-brand-wrap">
+        <a class="tl-brand" href="/"><span class="tl-prompt">❯</span><span>link</span><span class="tl-cursor"></span></a>
+        <div class="tl-powerline"><span class="tl-segment tl-segment-host">admin</span><span class="tl-segment tl-segment-path">~/links</span></div>
+      </div>
+      <nav class="tl-nav"><ul><li><a href="/">shorten</a></li><li><a href="https://tristian.id">tristian.id</a></li></ul></nav>
+    </header>
+    <main class="tl-admin">
+      <div class="tl-command"><span class="tl-prompt">❯</span> ls ~/links</div>
+      <div class="tl-admin-head">
+        <div>
+          <h1>Your links</h1>
+          <p class="tl-subtitle">Protected by Cloudflare Access. No second app password.</p>
+        </div>
+        <button id="refresh" type="button">refresh</button>
+      </div>
+      <p id="admin-error" class="error" hidden></p>
+      <div id="admin-links" class="tl-admin-list" aria-live="polite"></div>
+    </main>
+  </div>
+</body>
+</html>
