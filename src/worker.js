@@ -63,7 +63,7 @@ function protectedPage(slug) {
 }
 
 async function adminApi(request, env, pathname) {
-  if (!requireAdmin(request, env)) return text("Not found", 404);
+  if (!(await requireAdmin(request, env))) return text("Not found", 404);
 
   if (pathname === "/admin/api/links" && request.method === "GET") {
     const { results } = await env.DB.prepare(
