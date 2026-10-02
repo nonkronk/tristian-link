@@ -43,13 +43,5 @@ jobs:
           body=$(mktemp)
           trap 'rm -f "$body"' EXIT
           curl --fail --silent --show-error             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/tristian-link/settings" > "$body"
-          python3 - "$body" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1],encoding='utf-8'))
-assert x.get('success') is True
-r=x['result']
-bindings=r.get('bindings',[])
-names={b.get('name') for b in bindings}
-assert 'DB' in names
-PY
+          python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; r=x["result"]; names={b.get("name") for b in r.get("bindings",[])}; assert "DB" in names' "$body"
           echo "Hidden production Worker: PASS"
