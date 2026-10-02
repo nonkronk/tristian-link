@@ -1,3 +1,4 @@
+import { verifyAccessRequest } from "./access.js";
 import {
   ADMIN_EMAIL,
   constantTimeEqual,
@@ -139,11 +140,8 @@ export async function verifyLinkPassword(env, candidate, storedHash) {
   return constantTimeEqual(hash, storedHash);
 }
 
-export function requireAdmin(request, env) {
-  // Fail closed until the infrastructure-owned Cloudflare Access application
-  // is actually deployed. A client-supplied header alone must never unlock
-  // the admin API.
+export async function requireAdmin(request, env, fetchImpl = fetch) {
   if (env.ENVIRONMENT !== "production" || env.ADMIN_ACCESS_ENABLED !== "true") return false;
-  const email = request.headers.get("cf-access-authenticated-user-email") || "";
-  return email.toLowerCase() === ADMIN_EMAIL;
+  const identity = await verifyAccessRequest(request, env, fetchImpl);
+  return String(identity?.email || "").toLowerCase() === ADMIN_EMAIL;
 }

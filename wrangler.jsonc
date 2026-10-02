@@ -33,6 +33,8 @@
   ],
   "vars": {
     "ENVIRONMENT": "production",
-    "ADMIN_ACCESS_ENABLED": "true"
+    "ADMIN_ACCESS_ENABLED": "true",
+    "ACCESS_TEAM_DOMAIN": "https://tristian-id.cloudflareaccess.com",
+    "ACCESS_AUD": "755a92e36b603587e8963c759e05d99bdc07aec9a6de5789874bb49829fd0215"
   }
 }

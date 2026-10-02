@@ -85,16 +85,24 @@ jobs:
           [[ "$url" =~ ^https://[A-Za-z0-9._-]+\.workers\.dev$ ]]
           echo "url=$url" >> "$GITHUB_OUTPUT"
 
-      - name: Seed preview-only link password secret
+      - name: Ensure stable preview-only link password secret
         shell: bash
         env:
           CFG: ${{ steps.config.outputs.path }}
         run: |
           set -euo pipefail
-          secret=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
-          printf '%s' "$secret" | npx --yes wrangler@4.145.0 secret put LINK_PASSWORD_PEPPER --config "$CFG" >/dev/null
-          unset secret
-          echo "Preview Worker secret configured"
+          out=$(mktemp)
+          trap 'rm -f "$out"' EXIT
+          npx --yes wrangler@4.145.0 secret list --config "$CFG" > "$out"
+          if grep -q 'LINK_PASSWORD_PEPPER' "$out"; then
+            echo "Preview LINK_PASSWORD_PEPPER already exists; preserving it"
+          else
+            secret=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+            printf '%s' "$secret" | npx --yes wrangler@4.145.0 secret put LINK_PASSWORD_PEPPER --config "$CFG" >/dev/null
+            unset secret
+            sleep 5
+            echo "Preview LINK_PASSWORD_PEPPER created"
+          fi
 
       - name: Verify public create, redirect, password, and 404 behavior
         shell: bash

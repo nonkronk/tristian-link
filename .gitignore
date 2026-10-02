@@ -1,3 +1,18 @@
 .DS_Store
 *.swp
 *.tmp
+*.log
+
+# Local environment / Wrangler secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+.wrangler/
+.wrangler.preview.rendered.jsonc
+
+# Local tooling
+node_modules/
+__pycache__/
+*.py[cod]

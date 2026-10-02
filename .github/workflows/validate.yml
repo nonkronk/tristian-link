@@ -25,6 +25,7 @@ jobs:
         run: |
           set -euo pipefail
           node --check src/worker.js
+          node --check src/access.js
           node --check src/links.js
           node --check src/util.js
           node --check public/app.js

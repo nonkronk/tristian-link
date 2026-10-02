@@ -4,7 +4,7 @@
 
 [link.tristian.id](https://link.tristian.id) is a small Cloudflare-native URL shortener with a Termux Zenburn-inspired interface.
 
-The application is intentionally boring operationally: one Worker, static assets at the edge, D1 for links and analytics, and native Workers rate limiting for anonymous creation. The public service is fully serverless; the admin API is deliberately disabled until its infrastructure-owned authentication gate is provisioned.
+The application is intentionally boring operationally: one Worker, static assets at the edge, D1 for links and analytics, and native Workers rate limiting for anonymous creation. The public service is fully serverless; `/admin/*` is protected by an infrastructure-owned Cloudflare Access application and the Worker independently verifies the signed Access JWT before serving privileged API operations.
 
 ## Architecture
 
@@ -27,8 +27,11 @@ Cloudflare edge
    │     └── 302 target
    │
    └── /admin/*
-         └── disabled by default
-               └── enable only after an infrastructure auth gate exists
+         └── Cloudflare Access
+               └── RS256 JWT verification in Worker
+                     ├── issuer + audience + time claims
+                     └── owner email
+                           └── admin D1 operations
 ```
 
 Production does not require a VM, Node server, Redis, Postgres, nginx, or a permanent application fork.
@@ -43,7 +46,7 @@ The serverless rewrite keeps the behavior that matters from the previous Kutt de
 - optional link passwords;
 - redirect click counts;
 - bounded country/referrer/browser/OS analytics without retaining visitor IP addresses;
-- an admin list/delete API that is fail-closed until the private authentication gate is deployed;
+- an owner-only admin list/delete API behind Cloudflare Access, with a second fail-closed JWT verification layer in the Worker;
 - the existing `❯ link` visual language, mobile fixes and exact `tristian.id` favicon family;
 - branded 404, terms and abuse-report pages.
 
@@ -65,7 +68,8 @@ Only bounded metadata is written for new clicks: country code supplied by Cloudf
 - Embedded URL credentials are rejected.
 - Public creation is same-origin and rate limited.
 - Link passwords are HMAC-SHA-256 hashes using a Worker secret that is never stored in Git.
-- Admin endpoints require both an explicit production enable flag and the authenticated-email signal from the infrastructure gate. Production currently keeps the flag disabled because the Cloudflare IaC token does not yet have Access Apps/Policies Write.
+- Admin endpoints require the production enable flag **and** a valid `Cf-Access-Jwt-Assertion`. The Worker verifies Cloudflare's RS256 signature against the rotating team JWKS, then checks issuer, application audience, validity times, token type and owner email. The legacy identity header alone is never accepted.
+- The Access team domain and application audience in `wrangler.jsonc` are public identifiers, not credentials; authorization still requires a Cloudflare-signed token.
 - Static pages ship a strict CSP, no-referrer policy, frame denial and locked-down Permissions Policy.
 - Production `workers.dev` and preview URLs are disabled.
 
@@ -109,6 +113,7 @@ At the migration point the live Kutt state contained 8 links, 27 aggregate visit
 
 ```bash
 node --check src/worker.js
+node --check src/access.js
 node test/serverless.test.mjs
 python3 -m py_compile scripts/kutt-to-d1.py
 ```
