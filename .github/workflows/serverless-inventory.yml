@@ -64,10 +64,16 @@ jobs:
           docker exec -i kutt_pg psql -X -v ON_ERROR_STOP=1 -U ritb -d ur_postgres -At <<'SQL'
           SELECT json_build_object(
             'links_total', (SELECT count(*) FROM links),
-            'links_custom_domain', (SELECT count(*) FROM links WHERE domain IS NOT NULL AND domain <> ''),
+            'links_custom_domain', (SELECT count(*) FROM links WHERE domain_id IS NOT NULL),
             'links_passworded', (SELECT count(*) FROM links WHERE password IS NOT NULL AND password <> ''),
             'links_expiring', (SELECT count(*) FROM links WHERE expire_in IS NOT NULL),
             'users_total', (SELECT count(*) FROM users),
-            'domains_total', (SELECT count(*) FROM domains)
+            'domains_total', (SELECT count(*) FROM domains),
+            'links_owned', (SELECT count(*) FROM links WHERE user_id IS NOT NULL),
+            'links_anonymous', (SELECT count(*) FROM links WHERE user_id IS NULL),
+            'links_banned', (SELECT count(*) FROM links WHERE banned),
+            'api_keys_present', (SELECT count(*) FROM users WHERE apikey IS NOT NULL AND apikey <> ''),
+            'visits_rows', (SELECT count(*) FROM visits),
+            'visit_total', (SELECT COALESCE(sum(total),0) FROM visits)
           );
           SQL
