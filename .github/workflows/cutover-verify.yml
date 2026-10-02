@@ -13,7 +13,11 @@ permissions:
 jobs:
   verify:
     runs-on: [self-hosted, Linux, ARM64, link]
+    environment: CLOUDFLARE
     timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 54a91f1020fb773dad8aa0b3a70f93b4
     steps:
       - uses: actions/checkout@v7
       - name: Verify live serverless surface
@@ -37,5 +41,36 @@ jobs:
             exit 1
           }
           echo "Live Worker surface: PASS"
+      - name: Verify live create → redirect → D1 cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          base='https://link.tristian.id'
+          alias="ci-live-${GITHUB_RUN_ID}"
+          payload=$(printf '{"target":"https://example.com/live-serverless-ci","customurl":"%s","description":"production cutover smoke"}' "$alias")
+
+          code=$(curl -sS -o "$tmp/create" -w '%{http_code}' \
+            -H 'Content-Type: application/json' --data "$payload" "$base/api/links")
+          [[ "$code" == 201 ]] || { echo "production create failed: HTTP $code" >&2; exit 1; }
+
+          curl -sS --max-redirs 0 -D "$tmp/headers" -o /dev/null "$base/$alias"
+          grep -qE '^HTTP/[^ ]+ 302' "$tmp/headers"
+          grep -qi '^location: https://example.com/live-serverless-ci' "$tmp/headers"
+
+          sql=$(python3 -c 'import json,sys; a=sys.argv[1]; print(json.dumps({"sql":"DELETE FROM clicks WHERE link_id IN (SELECT id FROM links WHERE address = ?); DELETE FROM links WHERE address = ?","params":[a,a]}))' "$alias")
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H 'Content-Type: application/json' \
+            --data "$sql" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/61153ad9-0896-4271-acb4-e4bb8679cc09/query" \
+            > "$tmp/delete"
+          python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True' "$tmp/delete"
+
+          missing=$(curl -sS -o /dev/null -w '%{http_code}' "$base/$alias")
+          [[ "$missing" == 404 ]] || { echo "production smoke cleanup did not remove test link" >&2; exit 1; }
+          echo "Live create/redirect/cleanup: PASS"
+
       - name: Verify migrated redirect parity privately
         run: python3 scripts/verify-cutover.py
