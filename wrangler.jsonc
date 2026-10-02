@@ -33,6 +33,6 @@
   ],
   "vars": {
     "ENVIRONMENT": "production",
-    "ADMIN_ACCESS_ENABLED": "false"
+    "ADMIN_ACCESS_ENABLED": "true"
   }
 }
