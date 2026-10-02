@@ -150,8 +150,9 @@ jobs:
 
           echo "check: missing link"
           code=$(curl -sS -o "$tmp/notfound" -w '%{http_code}' "$URL/ci-this-does-not-exist")
-          [[ "$code" == 404 ]]
-          grep -qF 'link not found' "$tmp/notfound"
+          echo "missing link HTTP $code"
+          [[ "$code" == 404 ]] || { head -c 400 "$tmp/notfound"; echo; exit 1; }
+          grep -qF 'link not found' "$tmp/notfound" || { head -c 400 "$tmp/notfound"; echo; exit 1; }
 
           echo "check: preview admin"
           admin_code=$(curl -sS -o /dev/null -w '%{http_code}' "$URL/admin/api/links")
