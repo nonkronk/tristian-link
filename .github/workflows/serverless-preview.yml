@@ -44,17 +44,7 @@ jobs:
             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database?name=tristian-link-preview" \
             > "$body"
-          db_id=$(python3 - "$body" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1], encoding="utf-8"))
-assert x.get("success") is True
-rows=[r for r in x.get("result",[]) if r.get("name")=="tristian-link-preview"]
-if len(rows)>1:
-    raise SystemExit("duplicate preview D1 databases")
-if rows:
-    print(rows[0]["uuid"])
-PY
-          )
+          db_id=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; rows=[r for r in x.get("result",[]) if r.get("name")=="tristian-link-preview"]; assert len(rows)<=1; print(rows[0]["uuid"] if rows else "")' "$body")
           if [[ -z "$db_id" ]]; then
             curl --fail --silent --show-error \
               -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
@@ -62,15 +52,7 @@ PY
               --data '{"name":"tristian-link-preview","primary_location_hint":"apac"}' \
               "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" \
               > "$body"
-            db_id=$(python3 - "$body" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1], encoding="utf-8"))
-assert x.get("success") is True
-r=x["result"]
-assert r["name"]=="tristian-link-preview"
-print(r["uuid"])
-PY
-            )
+            db_id=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; r=x["result"]; assert r["name"]=="tristian-link-preview"; print(r["uuid"])' "$body")
           fi
           [[ "$db_id" =~ ^[0-9a-f-]{36}$ ]]
           echo "id=$db_id" >> "$GITHUB_OUTPUT"
@@ -84,14 +66,7 @@ PY
         run: |
           set -euo pipefail
           cfg="$PWD/.wrangler.preview.rendered.jsonc"
-          python3 - "$D1_ID" "$cfg" <<'PY'
-import pathlib,sys
-db_id,out=sys.argv[1:]
-text=pathlib.Path("wrangler.preview.jsonc").read_text(encoding="utf-8")
-if text.count("__D1_DATABASE_ID__") != 1:
-    raise SystemExit("preview D1 placeholder contract changed")
-pathlib.Path(out).write_text(text.replace("__D1_DATABASE_ID__",db_id),encoding="utf-8")
-PY
+          python3 -c 'import pathlib,sys; db_id,out=sys.argv[1:]; text=pathlib.Path("wrangler.preview.jsonc").read_text(encoding="utf-8"); assert text.count("__D1_DATABASE_ID__")==1; pathlib.Path(out).write_text(text.replace("__D1_DATABASE_ID__",db_id),encoding="utf-8")' "$D1_ID" "$cfg"
           echo "path=$cfg" >> "$GITHUB_OUTPUT"
           npx --yes wrangler@4.145.0 d1 migrations apply DB --remote --config "$cfg"
 
@@ -146,12 +121,7 @@ PY
           code=$(curl -sS -o "$tmp/create.json" -w '%{http_code}' \
             -H 'Content-Type: application/json' --data "$payload" "$URL/api/links")
           [[ "$code" == 201 ]]
-          python3 - "$tmp/create.json" "$alias" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1],encoding="utf-8"))
-assert x["address"]==sys.argv[2]
-assert x["url"].endswith("/"+sys.argv[2])
-PY
+          python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x["address"]==sys.argv[2]; assert x["url"].endswith("/"+sys.argv[2])' "$tmp/create.json" "$alias"
 
           curl -sS -D "$tmp/headers" -o /dev/null "$URL/$alias"
           grep -qE '^HTTP/[^ ]+ 302' "$tmp/headers"
