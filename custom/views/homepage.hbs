@@ -1,0 +1,20 @@
+{{> header}}
+<div class="tl-home-shell">
+  {{> shortener}}
+  {{#unless user}}
+    <section class="tl-manifest" aria-label="What link.tristian.id can do">
+      <div class="tl-manifest-title"><span class="tl-prompt">❯</span> ls ~/features</div>
+      <dl>
+        <div><dt>custom domains</dt><dd>your domain, your links</dd></div>
+        <div><dt>analytics</dt><dd>see what gets clicked</dd></div>
+        <div><dt>expiry + passwords</dt><dd>links can disappear or stay private</dd></div>
+        <div><dt>api</dt><dd>automate it when clicking gets boring</dd></div>
+      </dl>
+      <p class="tl-manifest-note">Fast enough to forget about. Small enough to understand.</p>
+    </section>
+  {{/unless}}
+</div>
+{{#if user}}
+  {{> links/table}}
+{{/if}}
+{{> footer}}

@@ -1,0 +1,81 @@
+<footer class="tl-footer">
+  <div class="tl-footer-line">
+    <span><span class="tl-prompt">❯</span> link.tristian.id</span>
+    <span class="tl-footer-copy">a small URL shortener by <a href="https://tristian.id">tristian.id</a></span>
+  </div>
+  <nav aria-label="Footer">
+    <a href="/terms">terms</a>
+    {{#if report_email}}<a href="/report">report abuse</a>{{/if}}
+    {{#if contact_email}}
+      <button class="link" hx-get="/get-support-email" hx-swap="outerHTML">
+        <span>{{> icons/spinner}}</span>
+        contact
+      </button>
+    {{/if}}
+    <a href="https://github.com/thedevs-network/kutt" target="_blank" rel="noopener noreferrer">powered by Kutt</a>
+  </nav>
+</footer>
+
+<button id="tl-command-trigger" class="tl-command-trigger" type="button" aria-label="Open command palette" title="Commands (⌘/Ctrl K)">⌘K</button>
+<div id="tl-command-palette" class="tl-command-palette" hidden>
+  <div class="tl-command-dialog" role="dialog" aria-modal="true" aria-labelledby="tl-command-title">
+    <div class="tl-command-head">
+      <span id="tl-command-title"><span class="tl-prompt">❯</span> commands</span>
+      <kbd>esc</kbd>
+    </div>
+    <button type="button" data-tl-action="focus"><span>shorten a link</span><kbd>/</kbd></button>
+    {{#if user}}
+      <a href="/"><span>your links</span><kbd>g l</kbd></a>
+      <a href="/settings"><span>settings</span><kbd>g s</kbd></a>
+    {{else}}
+      <a href="/login"><span>log in</span><kbd>g i</kbd></a>
+    {{/if}}
+    <a href="https://tristian.id"><span>visit tristian.id</span><kbd>g h</kbd></a>
+  </div>
+</div>
+
+<script>
+(() => {
+  const palette = document.getElementById("tl-command-palette");
+  const trigger = document.getElementById("tl-command-trigger");
+  if (!palette || !trigger) return;
+  const editable = (el) => el && (el.matches("input, textarea, select") || el.isContentEditable);
+  const open = () => {
+    palette.hidden = false;
+    document.body.classList.add("tl-palette-open");
+    const first = palette.querySelector("button, a");
+    if (first) first.focus();
+  };
+  const close = () => {
+    palette.hidden = true;
+    document.body.classList.remove("tl-palette-open");
+  };
+  const focusTarget = () => {
+    const target = document.getElementById("target");
+    palette.hidden = true;
+    document.body.classList.remove("tl-palette-open");
+    if (target) { target.focus(); target.select(); }
+  };
+  trigger.addEventListener("click", open);
+  palette.addEventListener("click", (event) => { if (event.target === palette) close(); });
+  const focusCommand = palette.querySelector("[data-tl-action='focus']");
+  if (focusCommand) focusCommand.addEventListener("click", focusTarget);
+  document.addEventListener("keydown", (event) => {
+    const key = event.key.toLowerCase();
+    if ((event.metaKey || event.ctrlKey) && key === "k") {
+      event.preventDefault();
+      palette.hidden ? open() : close();
+      return;
+    }
+    if (event.key === "Escape" && !palette.hidden) {
+      event.preventDefault();
+      close();
+      return;
+    }
+    if (event.key === "/" && !editable(event.target)) {
+      const target = document.getElementById("target");
+      if (target) { event.preventDefault(); target.focus(); target.select(); }
+    }
+  });
+})();
+</script>

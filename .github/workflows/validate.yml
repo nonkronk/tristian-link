@@ -1,0 +1,34 @@
+name: Validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate product layer
+        run: bash test/theme.sh
+      - name: Verify against exact upstream Kutt image
+        run: bash test/upstream.sh
+      - name: Verify artifact image shape
+        run: |
+          set -euo pipefail
+          docker build -t tristian-link-theme:test .
+          cid=$(docker create tristian-link-theme:test /does-not-run)
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          docker cp "$cid:/custom" "$RUNNER_TEMP/custom"
+          docker cp "$cid:/compatibility" "$RUNNER_TEMP/compatibility"
+          diff -qr custom "$RUNNER_TEMP/custom"
+          diff -qr compatibility "$RUNNER_TEMP/compatibility"
