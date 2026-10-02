@@ -10,7 +10,11 @@ import {
 
 async function notFound(env, request) {
   const url = new URL("/404.html", request.url);
-  return env.ASSETS.fetch(new Request(url, request));
+  const asset = await env.ASSETS.fetch(new Request(url, request));
+  return new Response(request.method === "HEAD" ? null : asset.body, {
+    status: 404,
+    headers: asset.headers,
+  });
 }
 
 function protectedPage(slug) {
