@@ -36,6 +36,21 @@ jobs:
         run: npx --yes wrangler@4.145.0 d1 migrations apply DB --remote --config wrangler.jsonc
       - name: Deploy production Worker
         run: npx --yes wrangler@4.145.0 deploy --config wrangler.jsonc
+      - name: Ensure stable link-password pepper
+        shell: bash
+        run: |
+          set -euo pipefail
+          out=$(mktemp)
+          trap 'rm -f "$out"' EXIT
+          npx --yes wrangler@4.145.0 secret list --config wrangler.jsonc > "$out"
+          if grep -q 'LINK_PASSWORD_PEPPER' "$out"; then
+            echo "LINK_PASSWORD_PEPPER already exists; preserving it"
+          else
+            secret=$(python3 -c 'import secrets; print(secrets.token_hex(32))')
+            printf '%s' "$secret" | npx --yes wrangler@4.145.0 secret put LINK_PASSWORD_PEPPER --config wrangler.jsonc >/dev/null
+            unset secret
+            echo "LINK_PASSWORD_PEPPER created"
+          fi
       - name: Verify production Worker settings
         shell: bash
         run: |
@@ -44,4 +59,5 @@ jobs:
           trap 'rm -f "$body"' EXIT
           curl --fail --silent --show-error             -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN"             "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/tristian-link/settings" > "$body"
           python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; r=x["result"]; names={b.get("name") for b in r.get("bindings",[])}; assert "DB" in names' "$body"
-          echo "Hidden production Worker: PASS"
+          npx --yes wrangler@4.145.0 secret list --config wrangler.jsonc | grep -q 'LINK_PASSWORD_PEPPER'
+          echo "Production Worker deployment: PASS"
