@@ -5,6 +5,7 @@ on:
     branches: [chore/serverless-post-cutover-cleanup]
     paths:
       - '.github/workflows/cutover-verify.yml'
+      - 'scripts/verify-cutover.py'
 
 permissions:
   contents: read
@@ -14,6 +15,7 @@ jobs:
     runs-on: [self-hosted, Linux, ARM64, link]
     timeout-minutes: 8
     steps:
+      - uses: actions/checkout@v7
       - name: Verify live serverless surface
         shell: bash
         run: |
@@ -21,54 +23,19 @@ jobs:
           tmp=$(mktemp -d)
           trap 'rm -rf "$tmp"' EXIT
           base='https://link.tristian.id'
-
           curl -fsS "$base/" > "$tmp/home"
           grep -qF 'data-tristian-link-theme="zenburn"' "$tmp/home"
           grep -qF 'edge redirects' "$tmp/home"
           grep -qF 'github.com/nonkronk/tristian-link' "$tmp/home"
           ! grep -qF 'powered by Kutt' "$tmp/home"
           curl -fsS "$base/api/health" | grep -q '"ok":true'
-
-          forged=$(curl -sS -o /dev/null -w '%{http_code}'             -H 'cf-access-authenticated-user-email: irvan@tristian.id'             "$base/admin/api/links")
+          forged=$(curl -sS -o /dev/null -w '%{http_code}' \
+            -H 'cf-access-authenticated-user-email: irvan@tristian.id' \
+            "$base/admin/api/links")
           [[ "$forged" == 404 ]] || {
             echo "admin fail-closed check failed: HTTP $forged" >&2
             exit 1
           }
           echo "Live Worker surface: PASS"
-
-      - name: Verify every migrated Kutt redirect without logging targets
-        shell: bash
-        run: |
-          set -euo pipefail
-          tmp=$(mktemp -d)
-          trap 'rm -rf "$tmp"' EXIT
-          docker inspect kutt_pg >/dev/null
-          docker exec kutt_pg psql -X -U ritb -d ur_postgres -Atc             "SELECT COALESCE(json_agg(json_build_object('address',address,'target',target) ORDER BY id)::text,'[]') FROM links WHERE banned IS FALSE AND (expire_in IS NULL OR expire_in > now())"             > "$tmp/links.json"
-
-          python3 - "$tmp/links.json" <<'PY'
-import json
-import pathlib
-import subprocess
-import sys
-
-rows=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
-if not rows:
-    raise SystemExit("no active Kutt links found")
-
-for row in rows:
-    slug=row["address"]
-    expected=row["target"]
-    proc=subprocess.run(
-        ["curl","--silent","--show-error","--max-redirs","0","--dump-header","-","--output","/dev/null",
-         f"https://link.tristian.id/{slug}"],
-        text=True,capture_output=True,check=False,
-    )
-    if proc.returncode != 0:
-        raise SystemExit("live redirect request failed")
-    status=proc.stdout.splitlines()[0].split()[1]
-    locations=[line.split(":",1)[1].strip() for line in proc.stdout.splitlines() if line.lower().startswith("location:")]
-    if status != "302" or len(locations) != 1 or locations[0] != expected:
-        raise SystemExit("migrated redirect parity failed")
-
-print(f"Migrated redirect parity: PASS ({len(rows)} active links)")
-PY
+      - name: Verify migrated redirect parity privately
+        run: python3 scripts/verify-cutover.py
