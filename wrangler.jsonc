@@ -32,6 +32,7 @@
     }
   ],
   "vars": {
-    "ENVIRONMENT": "production"
+    "ENVIRONMENT": "production",
+    "ADMIN_ACCESS_ENABLED": "false"
   }
 }

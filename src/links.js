@@ -140,7 +140,10 @@ export async function verifyLinkPassword(env, candidate, storedHash) {
 }
 
 export function requireAdmin(request, env) {
-  if (env.ENVIRONMENT !== "production") return false;
+  // Fail closed until the infrastructure-owned Cloudflare Access application
+  // is actually deployed. A client-supplied header alone must never unlock
+  // the admin API.
+  if (env.ENVIRONMENT !== "production" || env.ADMIN_ACCESS_ENABLED !== "true") return false;
   const email = request.headers.get("cf-access-authenticated-user-email") || "";
   return email.toLowerCase() === ADMIN_EMAIL;
 }
