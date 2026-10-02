@@ -15,17 +15,17 @@ rows = json.loads(db.stdout.strip())
 if not rows:
     raise SystemExit("no active Kutt links found")
 
-for row in rows:
+for index, row in enumerate(rows, start=1):
     proc = subprocess.run(
         ["curl","--silent","--show-error","--max-redirs","0","--dump-header","-","--output","/dev/null",
          "https://link.tristian.id/" + row["address"]],
         text=True,capture_output=True,check=False,
     )
     if proc.returncode != 0:
-        raise SystemExit("live redirect request failed")
+        raise SystemExit(f"live redirect request failed at row {index}")
     header_lines = proc.stdout.splitlines()
     if not header_lines:
-        raise SystemExit("live redirect returned no headers")
+        raise SystemExit(f"live redirect returned no headers at row {index}")
     parts = header_lines[0].split()
     status = parts[1] if len(parts) > 1 else ""
     locations = [
@@ -33,7 +33,15 @@ for row in rows:
         for line in header_lines
         if line.lower().startswith("location:")
     ]
-    if status != "302" or len(locations) != 1 or locations[0] != row["target"]:
-        raise SystemExit("migrated redirect parity failed")
+    if status != "302":
+        raise SystemExit(f"migrated redirect row {index} returned HTTP {status}, expected 302")
+    if len(locations) != 1:
+        raise SystemExit(f"migrated redirect row {index} returned {len(locations)} Location headers")
+    canonical = subprocess.run(
+        ["node","-e","process.stdout.write(new URL(process.argv[1]).href)",row["target"]],
+        text=True,capture_output=True,check=True,
+    ).stdout
+    if locations[0] != canonical:
+        raise SystemExit(f"migrated redirect row {index} Location mismatch after URL canonicalization")
 
 print(f"Migrated redirect parity: PASS ({len(rows)} active links)")
