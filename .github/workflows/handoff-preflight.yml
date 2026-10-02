@@ -29,11 +29,29 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl --fail --silent --show-error \
-            -H "Authorization: Bearer $CF_TOKEN" \
-            https://api.cloudflare.com/client/v4/user/tokens/verify \
-            | python3 -c 'import json,sys; x=json.load(sys.stdin); assert x.get("success") is True; assert x.get("result",{}).get("status")=="active"'
-          echo "Cloudflare token active: PASS"
+          body=$(mktemp)
+          trap 'rm -f "$body"' EXIT
+          verify() {
+            local url=$1
+            local code
+            code=$(curl --silent --show-error -o "$body" -w '%{http_code}' \
+              -H "Authorization: Bearer $CF_TOKEN" "$url")
+            [[ "$code" == 200 ]] || return 1
+            python3 - "$body" <<'PY'
+import json,sys
+x=json.load(open(sys.argv[1], encoding="utf-8"))
+assert x.get("success") is True
+assert x.get("result",{}).get("status") == "active"
+PY
+          }
+          if verify https://api.cloudflare.com/client/v4/user/tokens/verify; then
+            echo "Cloudflare user-owned token active: PASS"
+          elif verify "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/tokens/verify"; then
+            echo "Cloudflare account-owned token active: PASS"
+          else
+            echo "Cloudflare token verification failed for both user-owned and account-owned token endpoints" >&2
+            exit 1
+          fi
 
       - name: Verify Workers account access
         shell: bash
