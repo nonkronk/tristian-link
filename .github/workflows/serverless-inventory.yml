@@ -19,7 +19,7 @@ jobs:
         run: |
           set -euo pipefail
           docker inspect kutt_pg >/dev/null
-          docker exec kutt_pg psql -X -v ON_ERROR_STOP=1 -U ritb -d ur_postgres -At <<'SQL'
+          docker exec -i kutt_pg psql -X -v ON_ERROR_STOP=1 -U ritb -d ur_postgres -At <<'SQL'
           SELECT json_build_object(
             'tables', (
               SELECT json_agg(t.table_name ORDER BY t.table_name)
@@ -43,7 +43,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker exec kutt_pg psql -X -v ON_ERROR_STOP=1 -U ritb -d ur_postgres -At <<'SQL'
+          docker exec -i kutt_pg psql -X -v ON_ERROR_STOP=1 -U ritb -d ur_postgres -At <<'SQL'
           DO $$
           DECLARE r record;
           DECLARE n bigint;
@@ -61,7 +61,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          docker exec kutt_pg psql -X -v ON_ERROR_STOP=1 -U ritb -d ur_postgres -At <<'SQL'
+          docker exec -i kutt_pg psql -X -v ON_ERROR_STOP=1 -U ritb -d ur_postgres -At <<'SQL'
           SELECT json_build_object(
             'links_total', (SELECT count(*) FROM links),
             'links_custom_domain', (SELECT count(*) FROM links WHERE domain IS NOT NULL AND domain <> ''),
