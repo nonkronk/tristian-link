@@ -67,6 +67,11 @@ export function isExpired(row) {
 }
 
 export async function createLink(request, env, ownerEmail = null) {
+  const origin = request.headers.get("origin");
+  if (origin && origin !== new URL(request.url).origin) {
+    return json({ error: "Cross-origin link creation is not allowed." }, 403);
+  }
+
   if (!ownerEmail) {
     const key = request.headers.get("cf-connecting-ip") || "unknown";
     const [client, global] = await Promise.all([
