@@ -4,7 +4,7 @@
 
 [link.tristian.id](https://link.tristian.id) is a small Cloudflare-native URL shortener with a Termux Zenburn-inspired interface.
 
-The application is intentionally boring operationally: one Worker, static assets at the edge, D1 for links and analytics, native Workers rate limiting for anonymous creation, and Cloudflare Access for the private admin surface.
+The application is intentionally boring operationally: one Worker, static assets at the edge, D1 for links and analytics, and native Workers rate limiting for anonymous creation. The public service is fully serverless; the admin API is deliberately disabled until its infrastructure-owned authentication gate is provisioned.
 
 ## Architecture
 
@@ -27,8 +27,8 @@ Cloudflare edge
    │     └── 302 target
    │
    └── /admin/*
-         └── Cloudflare Access
-               └── owner only
+         └── disabled by default
+               └── enable only after an infrastructure auth gate exists
 ```
 
 Production does not require a VM, Node server, Redis, Postgres, nginx, or a permanent application fork.
@@ -43,7 +43,7 @@ The serverless rewrite keeps the behavior that matters from the previous Kutt de
 - optional link passwords;
 - redirect click counts;
 - bounded country/referrer/browser/OS analytics without retaining visitor IP addresses;
-- a private admin list/delete API;
+- an admin list/delete API that is fail-closed until the private authentication gate is deployed;
 - the existing `❯ link` visual language, mobile fixes and exact `tristian.id` favicon family;
 - branded 404, terms and abuse-report pages.
 
@@ -65,7 +65,7 @@ Only bounded metadata is written for new clicks: country code supplied by Cloudf
 - Embedded URL credentials are rejected.
 - Public creation is same-origin and rate limited.
 - Link passwords are HMAC-SHA-256 hashes using a Worker secret that is never stored in Git.
-- Admin endpoints require Cloudflare Access and independently verify the authenticated email header.
+- Admin endpoints require both an explicit production enable flag and the authenticated-email signal from the infrastructure gate. Production currently keeps the flag disabled because the Cloudflare IaC token does not yet have Access Apps/Policies Write.
 - Static pages ship a strict CSP, no-referrer policy, frame denial and locked-down Permissions Policy.
 - Production `workers.dev` and preview URLs are disabled.
 
@@ -89,7 +89,7 @@ pull request
                  tristian-link
 ```
 
-Cloudflare routing remains owned by the separate infrastructure repository so application deployment and traffic cutover are independent operations.
+Cloudflare routing and administrator authentication remain owned by the separate infrastructure repository so application deployment, privileged access, and traffic cutover are independent operations.
 
 ## Migration safety
 
@@ -110,7 +110,7 @@ At the migration point the live Kutt state contained 8 links, 27 aggregate visit
 ```bash
 node --check src/worker.js
 node test/serverless.test.mjs
-python3 -m py_compile scripts/kutt-to-d1.py scripts/reconcile-access.py
+python3 -m py_compile scripts/kutt-to-d1.py
 ```
 
 The live preview workflow additionally proves create → redirect, protected-link challenge, missing-link 404 behavior and D1 migrations against an isolated preview database.
