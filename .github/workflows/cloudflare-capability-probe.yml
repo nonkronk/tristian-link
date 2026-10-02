@@ -29,13 +29,7 @@ jobs:
             -H "Authorization: Bearer $CF_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/apps")
           if [[ "$apps_code" == 200 ]]; then
-            python3 - "$body" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1],encoding='utf-8'))
-assert x.get('success') is True
-rows=x.get('result') or []
-print(f"ACCESS_APPS_READ=available count={len(rows)} self_hosted={sum(1 for r in rows if r.get('type')=='self_hosted')}")
-PY
+            python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; rows=x.get("result") or []; print("ACCESS_APPS_READ=available count={} self_hosted={}".format(len(rows),sum(1 for r in rows if r.get("type")=="self_hosted")))' "$body"
           else
             echo "ACCESS_APPS_READ=not_authorized http=$apps_code"
           fi
@@ -44,13 +38,7 @@ PY
             -H "Authorization: Bearer $CF_TOKEN" \
             "https://api.cloudflare.com/client/v4/accounts/$CF_ACCOUNT/access/identity_providers")
           if [[ "$idp_code" == 200 ]]; then
-            python3 - "$body" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1],encoding='utf-8'))
-assert x.get('success') is True
-types=sorted({str(r.get('type')) for r in (x.get('result') or [])})
-print(f"ACCESS_IDP_READ=available count={len(x.get('result') or [])} types={','.join(types)}")
-PY
+            python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; rows=x.get("result") or []; types=sorted({str(r.get("type")) for r in rows}); print("ACCESS_IDP_READ=available count={} types={}".format(len(rows),",".join(types)))' "$body"
           else
             echo "ACCESS_IDP_READ=not_authorized http=$idp_code"
           fi
