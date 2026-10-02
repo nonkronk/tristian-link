@@ -7,6 +7,7 @@ import {
   parseExpiry,
   randomSlug,
 } from "../src/util.js";
+import { requireAdmin } from "../src/links.js";
 
 assert.equal(normalizeSlug("abc-123_X"), "abc-123_X");
 assert.throws(() => normalizeSlug("api"), /reserved/);
@@ -27,3 +28,9 @@ for (let i = 0; i < 100; i++) {
 }
 
 console.log("serverless unit contract: PASS");
+
+const adminRequest = new Request("https://link.tristian.id/admin/api/links", {
+  headers: { "cf-access-authenticated-user-email": "irvan@tristian.id" },
+});
+assert.equal(requireAdmin(adminRequest, { ENVIRONMENT: "production", ADMIN_ACCESS_ENABLED: "false" }), false);
+assert.equal(requireAdmin(adminRequest, { ENVIRONMENT: "production", ADMIN_ACCESS_ENABLED: "true" }), true);
