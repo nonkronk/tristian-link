@@ -37,12 +37,7 @@ jobs:
             code=$(curl --silent --show-error -o "$body" -w '%{http_code}' \
               -H "Authorization: Bearer $CF_TOKEN" "$url")
             [[ "$code" == 200 ]] || return 1
-            python3 - "$body" <<'PY'
-import json,sys
-x=json.load(open(sys.argv[1], encoding="utf-8"))
-assert x.get("success") is True
-assert x.get("result",{}).get("status") == "active"
-PY
+            python3 -c 'import json,sys; x=json.load(open(sys.argv[1], encoding="utf-8")); assert x.get("success") is True; assert x.get("result",{}).get("status") == "active"' "$body"
           }
           if verify https://api.cloudflare.com/client/v4/user/tokens/verify; then
             echo "Cloudflare user-owned token active: PASS"
