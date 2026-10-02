@@ -59,14 +59,21 @@ jobs:
           grep -qE '^HTTP/[^ ]+ 302' "$tmp/headers"
           grep -qi '^location: https://example.com/live-serverless-ci' "$tmp/headers"
 
-          sql=$(python3 -c 'import json,sys; a=sys.argv[1]; print(json.dumps({"sql":"DELETE FROM clicks WHERE link_id IN (SELECT id FROM links WHERE address = ?); DELETE FROM links WHERE address = ?","params":[a,a]}))' "$alias")
-          curl --fail --silent --show-error \
-            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
-            -H 'Content-Type: application/json' \
-            --data "$sql" \
-            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/61153ad9-0896-4271-acb4-e4bb8679cc09/query" \
-            > "$tmp/delete"
-          python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True' "$tmp/delete"
+          # D1 REST query accepts one parameterized statement per request.
+          # Also remove the one test row left by the previous failed cleanup run.
+          stale='ci-live-36981152983'
+          clicks_sql=$(python3 -c 'import json,sys; a,b=sys.argv[1:]; print(json.dumps({"sql":"DELETE FROM clicks WHERE link_id IN (SELECT id FROM links WHERE address IN (?, ?))","params":[a,b]}))' "$alias" "$stale")
+          links_sql=$(python3 -c 'import json,sys; a,b=sys.argv[1:]; print(json.dumps({"sql":"DELETE FROM links WHERE address IN (?, ?)","params":[a,b]}))' "$alias" "$stale")
+          for item in clicks links; do
+            payload_var="${item}_sql"
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H 'Content-Type: application/json' \
+              --data "${!payload_var}" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/61153ad9-0896-4271-acb4-e4bb8679cc09/query" \
+              > "$tmp/delete-$item"
+            python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; assert all(r.get("success") is True for r in x.get("result",[]))' "$tmp/delete-$item"
+          done
 
           missing=$(curl -sS -o /dev/null -w '%{http_code}' "$base/$alias")
           [[ "$missing" == 404 ]] || { echo "production smoke cleanup did not remove test link" >&2; exit 1; }
