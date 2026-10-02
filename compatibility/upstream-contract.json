@@ -1,0 +1,11 @@
+{
+  "upstream": "thedevs-network/kutt",
+  "files": {
+    "server/views/homepage.hbs": "b17b5f69f1db4dbeee7e51ec706ddd2e0eff9d4b",
+    "server/views/layout.hbs": "814339cc67045a5935ae8d6a94d8a75652f52fbb",
+    "server/views/partials/header.hbs": "31c1b2b6b9bb26aaab7d24d99bb8595e8e43285e",
+    "server/views/partials/footer.hbs": "adc6fc48a78719fe25a8648563dd33c233b49759",
+    "server/views/partials/shortener.hbs": "802dcbcfa204f683cdfe80b44cd5ee2715714d85",
+    "server/views/404.hbs": "43ac871901d6c5d57161a523f4d63468c8610746"
+  }
+}

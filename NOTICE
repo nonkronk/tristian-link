@@ -1,0 +1,13 @@
+Tristian Link
+Copyright (c) 2026 Irvan Tristian
+
+This project is a customization layer for Kutt:
+https://github.com/thedevs-network/kutt
+
+Portions of the Handlebars view structure are derived from Kutt and remain
+subject to Kutt's MIT license. Tristian Link is not affiliated with or
+endorsed by the upstream Kutt maintainers.
+
+The favicon files under custom/images/favicon* and apple-touch-icon.png are
+copied from https://github.com/nonkronk/tristian-id and are intentionally kept
+byte-identical by CI.

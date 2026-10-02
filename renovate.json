@@ -1,0 +1,32 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", "docker:pinDigests"],
+  "enabledManagers": ["docker-compose"],
+  "includePaths": ["compatibility/compose.yaml"],
+  "prConcurrentLimit": 3,
+  "packageRules": [
+    {
+      "description": "Kutt patch and digest updates are compatibility-gated and may auto-merge",
+      "matchManagers": ["docker-compose"],
+      "matchPackageNames": ["kutt/kutt"],
+      "matchUpdateTypes": ["patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr"
+    },
+    {
+      "description": "Kutt minor updates require human merge after compatibility CI",
+      "matchManagers": ["docker-compose"],
+      "matchPackageNames": ["kutt/kutt"],
+      "matchUpdateTypes": ["minor"],
+      "automerge": false
+    },
+    {
+      "description": "Kutt major updates require explicit dashboard approval",
+      "matchManagers": ["docker-compose"],
+      "matchPackageNames": ["kutt/kutt"],
+      "matchUpdateTypes": ["major"],
+      "dependencyDashboardApproval": true,
+      "automerge": false
+    }
+  ]
+}

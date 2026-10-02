@@ -1,0 +1,34 @@
+<header class="tl-header" data-tristian-link-theme="zenburn">
+  <div class="tl-brand-wrap">
+    <a class="tl-brand nav" href="/" title="link.tristian.id home" aria-label="link.tristian.id home">
+      <span class="tl-prompt" aria-hidden="true">❯</span>
+      <span>link</span>
+      <span class="tl-cursor" aria-hidden="true"></span>
+    </a>
+    <div class="tl-powerline" aria-label="Current section">
+      <span class="tl-segment tl-segment-host">{{#if user}}user{{else}}guest{{/if}}</span>
+      <span class="tl-segment tl-segment-path">~/shorten</span>
+    </div>
+  </div>
+
+  <nav class="tl-nav" aria-label="Primary navigation">
+    <ul>
+      {{#if user}}
+        <li class="tl-nav-links"><a class="nav" href="/" title="Your links">links</a></li>
+        <li class="tl-nav-settings"><a class="nav" href="/settings" title="Settings">settings</a></li>
+        {{#if isAdmin}}
+          <li class="tl-nav-admin"><a class="nav" href="/admin" title="Admin">admin</a></li>
+        {{/if}}
+        <li class="tl-nav-logout"><a class="nav tl-muted-link" href="/logout" title="Log out">logout</a></li>
+      {{else}}
+        <li class="tl-nav-home"><a class="nav" href="https://tristian.id" title="tristian.id">tristian.id</a></li>
+        {{#if report_email}}
+          <li class="tl-nav-report"><a class="nav" href="/report" title="Report abuse">report</a></li>
+        {{/if}}
+        {{#unless login_disabled}}
+          <li class="tl-nav-login"><a class="button primary tl-login" href="/login" title="Log in">log in</a></li>
+        {{/unless}}
+      {{/if}}
+    </ul>
+  </nav>
+</header>
