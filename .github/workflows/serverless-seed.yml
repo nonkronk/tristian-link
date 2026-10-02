@@ -1,0 +1,191 @@
+name: Seed production D1 from Kutt
+
+on:
+  push:
+    branches: [feat/serverless-worker]
+    paths:
+      - 'migrations/**'
+      - 'scripts/kutt-to-d1.py'
+      - '.github/workflows/serverless-seed.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tristian-link-production-seed
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    runs-on: [self-hosted, Linux, ARM64, link]
+    environment: CLOUDFLARE
+    timeout-minutes: 15
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 54a91f1020fb773dad8aa0b3a70f93b4
+      CI: "true"
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Guard live Kutt feature compatibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker inspect kutt_pg >/dev/null
+          guard=$(docker exec kutt_pg psql -X -U ritb -d ur_postgres -Atc "SELECT (SELECT count(*) FROM domains)::text || '|' || (SELECT count(*) FROM links WHERE password IS NOT NULL AND password <> '')::text || '|' || (SELECT count(*) FROM users WHERE apikey IS NOT NULL AND apikey <> '')::text")
+          echo "Kutt unsupported-feature counts (domains|passworded|api_keys): $guard"
+          [[ "$guard" == "0|0|0" ]] || {
+            echo "Kutt gained a feature that requires an explicit migration adapter; refusing to seed D1." >&2
+            exit 1
+          }
+
+      - name: Export Kutt rows privately
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          tmp=$(mktemp -d)
+          chmod 700 "$tmp"
+          echo "dir=$tmp" >> "$GITHUB_OUTPUT"
+
+          docker exec kutt_pg psql -X -v ON_ERROR_STOP=1 -U ritb -d ur_postgres -c "\copy (
+            SELECT
+              l.id,
+              l.address,
+              l.target,
+              l.description,
+              CASE WHEN l.expire_in IS NULL THEN NULL ELSE to_char(l.expire_in, 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') END AS expire_at,
+              l.visit_count,
+              to_char(l.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS created_at,
+              to_char(l.updated_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS updated_at,
+              u.email AS owner_email,
+              l.banned
+            FROM links l
+            LEFT JOIN users u ON u.id = l.user_id
+            ORDER BY l.id
+          ) TO STDOUT WITH CSV HEADER" > "$tmp/links.csv"
+
+          docker exec kutt_pg psql -X -v ON_ERROR_STOP=1 -U ritb -d ur_postgres -c "\copy (
+            SELECT
+              v.id,
+              v.link_id,
+              to_char(v.created_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS created_at,
+              to_char(v.updated_at, 'YYYY-MM-DD\"T\"HH24:MI:SS.MS\"Z\"') AS updated_at,
+              v.countries::text AS countries_json,
+              v.referrers::text AS referrers_json,
+              v.total,
+              v.br_chrome,
+              v.br_edge,
+              v.br_firefox,
+              v.br_ie,
+              v.br_opera,
+              v.br_other,
+              v.br_safari,
+              v.os_android,
+              v.os_ios,
+              v.os_linux,
+              v.os_macos,
+              v.os_other,
+              v.os_windows,
+              u.email AS owner_email
+            FROM visits v
+            LEFT JOIN users u ON u.id = v.user_id
+            ORDER BY v.id
+          ) TO STDOUT WITH CSV HEADER" > "$tmp/visits.csv"
+
+          links=$(python3 -c 'import csv,sys; print(sum(1 for _ in csv.DictReader(open(sys.argv[1],newline="",encoding="utf-8"))))' "$tmp/links.csv")
+          visits=$(python3 -c 'import csv,sys; print(sum(1 for _ in csv.DictReader(open(sys.argv[1],newline="",encoding="utf-8"))))' "$tmp/visits.csv")
+          visit_total=$(docker exec kutt_pg psql -X -U ritb -d ur_postgres -Atc "SELECT COALESCE(sum(total),0) FROM visits")
+          echo "links=$links" >> "$GITHUB_OUTPUT"
+          echo "visits=$visits" >> "$GITHUB_OUTPUT"
+          echo "visit_total=$visit_total" >> "$GITHUB_OUTPUT"
+          echo "Private Kutt export complete: links=$links legacy_visits=$visits historical_clicks=$visit_total"
+
+      - name: Resolve or create production D1 database
+        id: d1
+        shell: bash
+        run: |
+          set -euo pipefail
+          body=$(mktemp)
+          trap 'rm -f "$body"' EXIT
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database?name=tristian-link" > "$body"
+          db_id=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; rows=[r for r in x.get("result",[]) if r.get("name")=="tristian-link"]; assert len(rows)<=1; print(rows[0]["uuid"] if rows else "")' "$body")
+          if [[ -z "$db_id" ]]; then
+            curl --fail --silent --show-error \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              -H "Content-Type: application/json" \
+              --data '{"name":"tristian-link","primary_location_hint":"apac"}' \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database" > "$body"
+            db_id=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; r=x["result"]; assert r["name"]=="tristian-link"; print(r["uuid"])' "$body")
+            echo "Created production D1"
+          else
+            echo "Production D1 already exists"
+          fi
+          [[ "$db_id" =~ ^[0-9a-f-]{36}$ ]]
+          echo "id=$db_id" >> "$GITHUB_OUTPUT"
+
+      - name: Render production config and apply schema
+        id: config
+        shell: bash
+        env:
+          D1_ID: ${{ steps.d1.outputs.id }}
+        run: |
+          set -euo pipefail
+          cfg="$PWD/.wrangler.production.rendered.jsonc"
+          python3 -c 'import pathlib,sys; db_id,out=sys.argv[1:]; text=pathlib.Path("wrangler.jsonc").read_text(encoding="utf-8"); assert text.count("__D1_DATABASE_ID__")==1; pathlib.Path(out).write_text(text.replace("__D1_DATABASE_ID__",db_id),encoding="utf-8")' "$D1_ID" "$cfg"
+          echo "path=$cfg" >> "$GITHUB_OUTPUT"
+          npx --yes wrangler@4.145.0 d1 migrations apply DB --remote --config "$cfg"
+
+      - name: Transform and import Kutt snapshot
+        shell: bash
+        env:
+          TMPDIR_PRIVATE: ${{ steps.source.outputs.dir }}
+          CFG: ${{ steps.config.outputs.path }}
+        run: |
+          set -euo pipefail
+          python3 scripts/kutt-to-d1.py "$TMPDIR_PRIVATE/links.csv" "$TMPDIR_PRIVATE/visits.csv" "$TMPDIR_PRIVATE/import.sql"
+          npx --yes wrangler@4.145.0 d1 execute DB --remote --config "$CFG" --file "$TMPDIR_PRIVATE/import.sql" >/dev/null
+          echo "Kutt snapshot imported into production D1"
+
+      - name: Verify source/D1 parity without exposing URLs
+        shell: bash
+        env:
+          D1_ID: ${{ steps.d1.outputs.id }}
+          EXPECT_LINKS: ${{ steps.source.outputs.links }}
+          EXPECT_VISITS: ${{ steps.source.outputs.visits }}
+          EXPECT_TOTAL: ${{ steps.source.outputs.visit_total }}
+        run: |
+          set -euo pipefail
+          body=$(mktemp)
+          trap 'rm -f "$body"' EXIT
+          curl --fail --silent --show-error \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            -H "Content-Type: application/json" \
+            --data '{"sql":"SELECT (SELECT count(*) FROM links) AS links_total, (SELECT count(*) FROM legacy_visits) AS visits_total, (SELECT COALESCE(sum(total),0) FROM legacy_visits) AS historical_clicks"}' \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/d1/database/$D1_ID/query" > "$body"
+          got=$(python3 -c 'import json,sys; x=json.load(open(sys.argv[1],encoding="utf-8")); assert x.get("success") is True; r=x["result"][0]["results"][0]; print(f"{r["links_total"]}|{r["visits_total"]}|{r["historical_clicks"]}")' "$body")
+          expected="$EXPECT_LINKS|$EXPECT_VISITS|$EXPECT_TOTAL"
+          echo "D1 parity counts links|visits|historical_clicks: $got"
+          [[ "$got" == "$expected" ]] || {
+            echo "Production D1 parity mismatch: expected $expected, got $got" >&2
+            exit 1
+          }
+          echo "Production D1 seed parity: PASS"
+
+      - name: Destroy private migration workspace
+        if: always()
+        shell: bash
+        env:
+          TMPDIR_PRIVATE: ${{ steps.source.outputs.dir }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${TMPDIR_PRIVATE:-}" && "$TMPDIR_PRIVATE" == /tmp/* ]]; then
+            rm -rf -- "$TMPDIR_PRIVATE"
+          fi
+          rm -f .wrangler.production.rendered.jsonc
