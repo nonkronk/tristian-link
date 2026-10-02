@@ -1,14 +1,14 @@
 name: Serverless preview
 
 on:
-  push:
-    branches: [feat/serverless-worker]
+  pull_request:
     paths:
       - 'src/**'
       - 'public/**'
       - 'migrations/**'
       - 'wrangler.preview.jsonc'
       - '.github/workflows/serverless-preview.yml'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -19,6 +19,7 @@ concurrency:
 
 jobs:
   preview:
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: [self-hosted, Linux, ARM64, link]
     environment: CLOUDFLARE
     timeout-minutes: 15
